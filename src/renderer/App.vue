@@ -1,35 +1,78 @@
 <script setup lang="ts">
-import viteLogo from './assets/vite.svg';
-import vueLogo from './assets/vue.svg';
+window.electronAPI.sendMessage('App loaded with webview layout!');
 
-import HelloWorld from './components/HelloWorld.vue'
-
-window.electronAPI.sendMessage('Hello from App.vue!');
+const handleButtonClick = () => {
+  console.log('Button clicked!');
+  window.electronAPI.sendMessage('Control button clicked!');
+};
 </script>
 
 <template>
-  <div>
-    <a href="https://vitejs.dev" target="_blank">
-      <img :src="viteLogo" class="logo" alt="Vite logo" />
-    </a>
-    <a href="https://vuejs.org/" target="_blank">
-      <img :src="vueLogo" class="logo vue" alt="Vue logo" />
-    </a>
+  <div class="container">
+    <div class="webview-container">
+      <webview 
+        src="https://www.baidu.com" 
+        class="webview"
+      ></webview>
+    </div>
+    <div class="control-panel">
+      <h2>控制面板</h2>
+      <button @click="handleButtonClick" class="control-button">
+        操作按钮
+      </button>
+    </div>
   </div>
-  <HelloWorld msg="Vite + Vue" />
 </template>
 
 <style scoped>
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
+.container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  margin: 0;
+  padding: 0;
 }
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
+
+.webview-container {
+  width: 70%;
+  height: 100%;
+  border-right: 1px solid #ccc;
 }
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #42b883aa);
+
+.webview {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.control-panel {
+  width: 30%;
+  height: 100%;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #f5f5f5;
+}
+
+.control-button {
+  padding: 12px 24px;
+  font-size: 16px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.control-button:hover {
+  background-color: #0056b3;
+}
+
+h2 {
+  margin-bottom: 30px;
+  color: #333;
 }
 </style>

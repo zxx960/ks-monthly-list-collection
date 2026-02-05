@@ -9,6 +9,7 @@ function createWindow () {
       preload: join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
+      webviewTag: true
     }
   });
 
