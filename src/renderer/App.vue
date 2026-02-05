@@ -11,8 +11,11 @@ const handleButtonClick = () => {
   <div class="container">
     <div class="webview-container">
       <webview 
-        src="https://www.baidu.com" 
+        src="https://jigou.kuaishou.com/" 
         class="webview"
+        allowpopups
+        nodeintegration
+        webpreferences="contextIsolation=false"
       ></webview>
     </div>
     <div class="control-panel">
