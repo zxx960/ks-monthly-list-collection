@@ -19,9 +19,9 @@ const handleButtonClick = () => {
       ></webview>
     </div>
     <div class="control-panel">
-      <h2>控制面板</h2>
+      <h2>快手月榜单采集</h2>
       <button @click="handleButtonClick" class="control-button">
-        操作按钮
+        采集数据
       </button>
     </div>
   </div>
@@ -55,8 +55,9 @@ const handleButtonClick = () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   background-color: #f5f5f5;
+  padding-top: 20px;
 }
 
 .control-button {
