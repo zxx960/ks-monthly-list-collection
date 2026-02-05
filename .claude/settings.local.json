@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(del \"D:\\项目\\electron-vue-template-master\\electron-vue-template-master\\src\\renderer\\main.ts\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
