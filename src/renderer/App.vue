@@ -5,7 +5,125 @@ window.electronAPI.sendMessage('App loaded with webview layout!');
 
 const webviewRef = ref<any>(null);
 const isCollecting = ref(false);
+const isCleaning = ref(false);
+const cleaningProgress = ref<{ total: number; done: number }>({total: 0, done: 0});
+const modalVisible = ref(false);
+const modalMessage = ref('');
 const collectedRows = ref<Array<{ title: string; publishTime: string; playCount: string; likeCount: string; videoUrl: string }>>([]);
+
+const showModal = (message: string) => {
+  modalMessage.value = message;
+  modalVisible.value = true;
+};
+
+const closeModal = () => {
+  modalVisible.value = false;
+};
+
+const arkApiKey = ref<string>((localStorage.getItem('ARK_API_KEY') || '').trim());
+
+const saveArkApiKey = () => {
+  const key = (arkApiKey.value || '').trim();
+  if (key) {
+    localStorage.setItem('ARK_API_KEY', key);
+  } else {
+    localStorage.removeItem('ARK_API_KEY');
+  }
+};
+
+const clearArkApiKey = () => {
+  arkApiKey.value = '';
+  localStorage.removeItem('ARK_API_KEY');
+};
+
+const extractJsonFromText = (text: string) => {
+  const m = (text || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    return JSON.parse(m[0]);
+  } catch {
+    return null;
+  }
+};
+
+const isShoppableByAI = async (apiKey: string, title: string) => {
+  const prompt = `你是一个短文本分类器。判断下面这个“视频标题”是否属于带货/电商推广内容。\n\n视频标题：${title}\n\n判定为带货的常见特征：\n- 出现商品/品牌/型号/规格等明显产品信息\n- 出现购买引导：下单、购买、链接、店铺、橱窗、购物车、直播间、领券、到手价、包邮、折扣等\n\n请只返回JSON，不要返回任何多余文字，格式：{"isShopping":true/false,"reason":"一句话理由"}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const resp = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'doubao-seed-1-6-flash-250828',
+        messages: [{role: 'user', content: prompt}],
+        thinking: {type: 'disabled'},
+        temperature: 0.2,
+        max_tokens: 1024
+      }),
+      signal: controller.signal
+    });
+
+    const data = await resp.json();
+    const content = data?.choices?.[0]?.message?.content || '';
+    const json = extractJsonFromText(content);
+    return {
+      isShopping: !!json?.isShopping,
+      reason: (json?.reason ?? '').toString()
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const handleCleanButtonClick = async () => {
+  if (isCollecting.value || isCleaning.value) return;
+  if (!collectedRows.value || collectedRows.value.length === 0) return;
+
+  const apiKey = (arkApiKey.value || '').trim();
+  if (!apiKey) {
+    window.electronAPI.sendMessage('请先填写并保存 Ark API Key');
+    return;
+  }
+
+  try {
+    isCleaning.value = true;
+    cleaningProgress.value = {total: collectedRows.value.length, done: 0};
+
+    const toRemove = new Set<number>();
+    let failedCount = 0;
+
+    for (let i = 0; i < collectedRows.value.length; i++) {
+      const row = collectedRows.value[i];
+      const title = (row?.title ?? '').toString();
+
+      try {
+        const res = await isShoppableByAI(apiKey, title);
+        if (res.isShopping) toRemove.add(i);
+      } catch (e) {
+        failedCount++;
+      }
+
+      cleaningProgress.value = {total: cleaningProgress.value.total, done: i + 1};
+      await new Promise((r) => setTimeout(r, 200));
+    }
+
+    const before = collectedRows.value.length;
+    collectedRows.value = collectedRows.value.filter((_, idx) => !toRemove.has(idx));
+    const after = collectedRows.value.length;
+    showModal(`数据清洗完成：删除 ${before - after} 条带货数据，剩余 ${after} 条${failedCount ? `，失败 ${failedCount} 条（已跳过）` : ''}`);
+  } catch (e) {
+    console.error('数据清洗失败', e);
+    window.electronAPI.sendMessage('数据清洗失败');
+  } finally {
+    isCleaning.value = false;
+    cleaningProgress.value = {total: 0, done: 0};
+  }
+};
 
 const handleButtonClick = async () => {
   const webview = webviewRef.value;
@@ -189,6 +307,16 @@ const handleButtonClick = async () => {
 
 <template>
   <div class="container">
+    <div v-if="modalVisible" class="modal-mask" @click.self="closeModal">
+      <div class="modal-card">
+        <div class="modal-title">提示</div>
+        <div class="modal-content">{{ modalMessage }}</div>
+        <div class="modal-actions">
+          <button type="button" class="modal-ok" @click="closeModal">确定</button>
+        </div>
+      </div>
+    </div>
+
     <div class="webview-container">
       <webview 
         src="https://jigou.kuaishou.com/" 
@@ -199,13 +327,34 @@ const handleButtonClick = async () => {
     </div>
     <div class="control-panel">
       <h2>快手月榜单采集</h2>
-      <button @click="handleButtonClick" class="control-button" :disabled="isCollecting">
-        采集数据
-      </button>
+      <div class="action-row">
+        <button @click="handleButtonClick" class="control-button action-button" :disabled="isCollecting || isCleaning">
+          采集数据
+        </button>
+        <button @click="handleCleanButtonClick" class="control-button clean-button action-button" :disabled="isCollecting || isCleaning || collectedRows.length === 0 || !arkApiKey.trim()">
+          数据清洗
+        </button>
+      </div>
+
+      <div class="ark-key-panel">
+        <input
+          v-model="arkApiKey"
+          class="ark-key-input"
+          placeholder="Ark API Key（必填，用于大模型清洗）"
+          :disabled="isCollecting || isCleaning"
+        />
+        <button type="button" class="ark-key-action" @click="saveArkApiKey" :disabled="isCollecting || isCleaning">
+          保存
+        </button>
+        <button type="button" class="ark-key-action" @click="clearArkApiKey" :disabled="isCollecting || isCleaning">
+          清除
+        </button>
+      </div>
 
       <div class="result-panel">
         <div v-if="collectedRows.length === 0" class="result-hint">{{ isCollecting ? '采集中...' : '暂无数据' }}</div>
         <div v-else-if="isCollecting" class="result-hint">采集中...</div>
+        <div v-else-if="isCleaning" class="result-hint">清洗中... ({{ cleaningProgress.done }}/{{ cleaningProgress.total }})</div>
         <table v-if="collectedRows.length > 0" class="result-table">
           <thead>
             <tr>
@@ -255,6 +404,58 @@ const handleButtonClick = async () => {
   width: 100%;
   height: 100%;
   border: none;
+}
+
+.modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal-card {
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.modal-content {
+  font-size: 14px;
+  color: #333;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.modal-ok {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: none;
+  background: #007bff;
+  color: #fff;
+  cursor: pointer;
 }
 
 .control-panel {
@@ -374,6 +575,62 @@ const handleButtonClick = async () => {
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.3s;
+}
+
+.action-row {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+}
+
+.action-button {
+  flex: 1;
+  padding: 12px 0;
+}
+
+.ark-key-panel {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ark-key-input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  outline: none;
+}
+
+.ark-key-input:disabled {
+  background: #f0f0f0;
+}
+
+.ark-key-action {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  background: #ffffff;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.ark-key-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.clean-button {
+  background-color: #6c757d;
+}
+
+.clean-button:hover {
+  background-color: #5a6268;
 }
 
 .control-button:disabled {
