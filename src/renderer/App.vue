@@ -101,11 +101,16 @@ const handleCleanButtonClick = async () => {
       const row = collectedRows.value[i];
       const title = (row?.title ?? '').toString();
 
-      try {
-        const res = await isShoppableByAI(apiKey, title);
-        if (res.isShopping) toRemove.add(i);
-      } catch (e) {
-        failedCount++;
+      // 已删除的视频直接标记删除，不调用大模型
+      if (row.videoUrl === '已删除') {
+        toRemove.add(i);
+      } else {
+        try {
+          const res = await isShoppableByAI(apiKey, title);
+          if (res.isShopping) toRemove.add(i);
+        } catch (e) {
+          failedCount++;
+        }
       }
 
       cleaningProgress.value = {total: cleaningProgress.value.total, done: i + 1};
@@ -113,9 +118,11 @@ const handleCleanButtonClick = async () => {
     }
 
     const before = collectedRows.value.length;
+    const deletedCount = Array.from(collectedRows.value).filter(r => r.videoUrl === '已删除').length;
     collectedRows.value = collectedRows.value.filter((_, idx) => !toRemove.has(idx));
     const after = collectedRows.value.length;
-    showModal(`数据清洗完成：删除 ${before - after} 条带货数据，剩余 ${after} 条${failedCount ? `，失败 ${failedCount} 条（已跳过）` : ''}`);
+    const shoppableCount = (before - after) - deletedCount;
+    showModal(`数据清洗完成：删除 ${deletedCount} 条已删除数据，${shoppableCount} 条带货数据，剩余 ${after} 条${failedCount ? `，失败 ${failedCount} 条（已跳过）` : ''}`);
   } catch (e) {
     console.error('数据清洗失败', e);
     window.electronAPI.sendMessage('数据清洗失败');
@@ -332,7 +339,7 @@ const handleButtonClick = async () => {
           采集数据
         </button>
         <button @click="handleCleanButtonClick" class="control-button clean-button action-button" :disabled="isCollecting || isCleaning || collectedRows.length === 0 || !arkApiKey.trim()">
-          数据清洗
+          {{ isCleaning ? '清洗中...' : '数据清洗' }}
         </button>
       </div>
 
