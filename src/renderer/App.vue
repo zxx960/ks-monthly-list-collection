@@ -6,6 +6,7 @@ window.electronAPI.sendMessage('App loaded with webview layout!');
 const webviewRef = ref<any>(null);
 const isCollecting = ref(false);
 const isCleaning = ref(false);
+const pageCount = ref<number>(1);
 const cleaningProgress = ref<{ total: number; done: number }>({total: 0, done: 0});
 const modalVisible = ref(false);
 const modalMessage = ref('');
@@ -141,6 +142,8 @@ const handleButtonClick = async () => {
 
   try {
     isCollecting.value = true;
+    const targetPages = Math.max(1, Math.floor(Number(pageCount.value) || 1));
+    pageCount.value = targetPages;
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
     const collectBaseRowsOnCurrentPage = async () => {
@@ -268,7 +271,7 @@ const handleButtonClick = async () => {
     collectedRows.value = [];
 
     let prevFirstTitle = '';
-    for (let page = 0; page < 2; page++) {
+    for (let page = 0; page < targetPages; page++) {
       const baseRowsOnPage = await collectBaseRowsOnCurrentPage();
       const startIndex = collectedRows.value.length;
 
@@ -294,7 +297,7 @@ const handleButtonClick = async () => {
 
       prevFirstTitle = (baseRowsOnPage[0]?.title ?? '').toString();
 
-      if (page < 1) {
+      if (page < targetPages - 1) {
         const nextOk = await clickNextPageAndWait(prevFirstTitle);
         if (!nextOk) {
           window.electronAPI.sendMessage('翻页失败或超时，停止后续采集');
@@ -334,6 +337,18 @@ const handleButtonClick = async () => {
     </div>
     <div class="control-panel">
       <h2>鱼粉快手月榜单采集</h2>
+      <div class="page-input-row">
+        <label class="page-input-label" for="page-count-input">采集页数</label>
+        <input
+          id="page-count-input"
+          v-model.number="pageCount"
+          type="number"
+          min="1"
+          step="1"
+          class="page-input"
+          :disabled="isCollecting || isCleaning"
+        />
+      </div>
       <div class="action-row">
         <button @click="handleButtonClick" class="control-button action-button" :disabled="isCollecting || isCleaning">
           采集数据
@@ -588,6 +603,35 @@ const handleButtonClick = async () => {
   width: 100%;
   display: flex;
   gap: 10px;
+}
+
+.page-input-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.page-input-label {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: #333;
+}
+
+.page-input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  outline: none;
+}
+
+.page-input:disabled {
+  background: #f0f0f0;
 }
 
 .action-button {
