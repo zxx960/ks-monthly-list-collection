@@ -16,51 +16,51 @@ const handleButtonClick = async () => {
 
   try {
     isCollecting.value = true;
-    const baseRows = await webview.executeJavaScript(
-      `(async () => {
-        const normalize = (s) => (s ?? '').toString().replace(/\\s+/g, ' ').trim();
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const collectBaseRowsOnCurrentPage = async () => {
+      const baseRows = await webview.executeJavaScript(
+        `(async () => {
+          const normalize = (s) => (s ?? '').toString().replace(/\\s+/g, ' ').trim();
 
-        const waitForRows = async () => {
-          const timeoutMs = 15000;
-          const intervalMs = 300;
-          const start = Date.now();
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-          while (Date.now() - start < timeoutMs) {
-            const list = Array.from(document.querySelectorAll('tbody tr.ks-table__row'));
-            if (list.length > 0) return list;
-            await sleep(intervalMs);
-          }
-          return [];
-        };
+          const waitForRows = async () => {
+            const timeoutMs = 15000;
+            const intervalMs = 300;
+            const start = Date.now();
 
-        const trList = await waitForRows();
-        return trList.map((tr) => {
-          const tds = Array.from(tr.querySelectorAll('td'));
+            while (Date.now() - start < timeoutMs) {
+              const list = Array.from(document.querySelectorAll('tbody tr.ks-table__row'));
+              if (list.length > 0) return list;
+              await sleep(intervalMs);
+            }
+            return [];
+          };
 
-          const title = normalize(tr.querySelector('.info__title__text')?.textContent);
-          const timeItems = Array.from(tr.querySelectorAll('.info__base__time__item'));
-          const publishTime = normalize(timeItems[0]?.textContent);
+          const trList = await waitForRows();
+          return trList.map((tr) => {
+            const tds = Array.from(tr.querySelectorAll('td'));
 
-          const playCount = normalize(tds[1]?.querySelector('.cell')?.textContent);
-          const likeCount = normalize(tds[2]?.querySelector('.cell')?.textContent);
+            const title = normalize(tr.querySelector('.info__title__text')?.textContent);
+            const timeItems = Array.from(tr.querySelectorAll('.info__base__time__item'));
+            const publishTime = normalize(timeItems[0]?.textContent);
 
-          return {title, publishTime, playCount, likeCount};
-        }).filter(r => r.title || r.publishTime || r.playCount || r.likeCount);
-      })()`,
-      true
-    );
+            const playCount = normalize(tds[1]?.querySelector('.cell')?.textContent);
+            const likeCount = normalize(tds[2]?.querySelector('.cell')?.textContent);
 
-    const safeBaseRows = Array.isArray(baseRows) ? baseRows : [];
-    collectedRows.value = safeBaseRows.map((r) => ({...r, videoUrl: ''}));
-    console.table(collectedRows.value);
-    window.electronAPI.sendMessage(`采集到 ${collectedRows.value.length} 条数据，开始采集视频链接...`);
+            return {title, publishTime, playCount, likeCount};
+          }).filter(r => r.title || r.publishTime || r.playCount || r.likeCount);
+        })()`,
+        true
+      );
+      return Array.isArray(baseRows) ? baseRows : [];
+    };
 
-    for (let i = 0; i < collectedRows.value.length; i++) {
+    const collectVideoUrlOnCurrentPageByIndex = async (idx: number) => {
       const videoUrl = await webview.executeJavaScript(
         `(async () => {
-          const idx = ${i};
+          const idx = ${idx};
 
           const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -68,7 +68,6 @@ const handleButtonClick = async () => {
           const rowElement = trList[idx];
           if (!rowElement) return '';
 
-          // 已删除检测
           const deletedTip = rowElement.querySelector('.info__title__tip');
           if (deletedTip && (deletedTip.textContent || '').includes('作品已删除')) {
             return '已删除';
@@ -93,13 +92,11 @@ const handleButtonClick = async () => {
             coverElement.click();
           }
 
-          // 弹窗打开后等待2秒再取链接
           await sleep(2000);
 
           const videoElement = document.querySelector('.video-player video');
           const url = (videoElement && (videoElement.src || videoElement.currentSrc)) ? (videoElement.src || videoElement.currentSrc) : '';
 
-          // 再等待2秒再关闭
           await sleep(2000);
           const escEvent = new KeyboardEvent('keydown', {
             key: 'Escape',
@@ -113,13 +110,72 @@ const handleButtonClick = async () => {
         })()`,
         true
       );
+      return videoUrl;
+    };
 
-      const normalizedVideoUrl = videoUrl === '已删除' ? '已删除' : (videoUrl ? videoUrl : '无链接');
-      collectedRows.value[i] = {...collectedRows.value[i], videoUrl: normalizedVideoUrl};
+    const clickNextPageAndWait = async (prevFirstTitle: string) => {
+      const ok = await webview.executeJavaScript(
+        `(async () => {
+          const prev = ${JSON.stringify(prevFirstTitle || '')};
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-      // 行与行之间间隔2秒
-      if (i < collectedRows.value.length - 1) {
-        await new Promise((r) => setTimeout(r, 2000));
+          const btn = document.querySelector('button.btn-next');
+          if (!btn) return false;
+          btn.click();
+
+          const timeoutMs = 15000;
+          const intervalMs = 300;
+          const start = Date.now();
+
+          while (Date.now() - start < timeoutMs) {
+            const first = document.querySelector('tbody tr.ks-table__row .info__title__text');
+            const title = (first && first.textContent) ? first.textContent.replace(/\\s+/g, ' ').trim() : '';
+            if (title && title !== prev) return true;
+            await sleep(intervalMs);
+          }
+          return false;
+        })()`,
+        true
+      );
+      return !!ok;
+    };
+
+    collectedRows.value = [];
+
+    let prevFirstTitle = '';
+    for (let page = 0; page < 2; page++) {
+      const baseRowsOnPage = await collectBaseRowsOnCurrentPage();
+      const startIndex = collectedRows.value.length;
+
+      if (!prevFirstTitle) {
+        prevFirstTitle = (baseRowsOnPage[0]?.title ?? '').toString();
+      }
+
+      collectedRows.value.push(...baseRowsOnPage.map((r) => ({...r, videoUrl: ''})));
+      window.electronAPI.sendMessage(`第 ${page + 1} 页采集到 ${baseRowsOnPage.length} 条数据，开始采集视频链接...`);
+
+      for (let i = 0; i < baseRowsOnPage.length; i++) {
+        const videoUrl = await collectVideoUrlOnCurrentPageByIndex(i);
+        const normalizedVideoUrl = videoUrl === '已删除' ? '已删除' : (videoUrl ? videoUrl : '无链接');
+        const targetIndex = startIndex + i;
+        if (collectedRows.value[targetIndex]) {
+          collectedRows.value[targetIndex] = {...collectedRows.value[targetIndex], videoUrl: normalizedVideoUrl};
+        }
+
+        if (i < baseRowsOnPage.length - 1) {
+          await sleep(2000);
+        }
+      }
+
+      prevFirstTitle = (baseRowsOnPage[0]?.title ?? '').toString();
+
+      if (page < 1) {
+        const nextOk = await clickNextPageAndWait(prevFirstTitle);
+        if (!nextOk) {
+          window.electronAPI.sendMessage('翻页失败或超时，停止后续采集');
+          break;
+        }
+        await sleep(500);
       }
     }
   } catch (e) {
