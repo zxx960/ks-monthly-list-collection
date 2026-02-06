@@ -333,7 +333,7 @@ const handleButtonClick = async () => {
       ></webview>
     </div>
     <div class="control-panel">
-      <h2>快手月榜单采集</h2>
+      <h2>鱼粉快手月榜单采集</h2>
       <div class="action-row">
         <button @click="handleButtonClick" class="control-button action-button" :disabled="isCollecting || isCleaning">
           采集数据
