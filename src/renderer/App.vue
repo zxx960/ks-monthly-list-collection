@@ -16,7 +16,7 @@ const handleButtonClick = async () => {
 
   try {
     isCollecting.value = true;
-    const rows = await webview.executeJavaScript(
+    const baseRows = await webview.executeJavaScript(
       `(async () => {
         const normalize = (s) => (s ?? '').toString().replace(/\\s+/g, ' ').trim();
 
@@ -35,95 +35,8 @@ const handleButtonClick = async () => {
           return [];
         };
 
-        const extractVideoUrl = async (rowElement, index) => {
-          try {
-            console.log('Processing row ' + (index + 1));
-            
-            // 检查是否为已删除的视频
-            const deletedTip = rowElement.querySelector('.info__title__tip');
-            if (deletedTip && deletedTip.textContent.includes('作品已删除')) {
-              console.log('Row ' + (index + 1) + ' is deleted, skipping video extraction');
-              return '已删除';
-            }
-            
-            const coverElement = rowElement.querySelector('.cover');
-            if (!coverElement) {
-              console.log('No cover element found in row ' + (index + 1));
-              return '';
-            }
-
-            // 检查封面是否为空（已删除的视频通常有空的封面）
-            const emptyCover = coverElement.querySelector('.cover__img--empty');
-            if (emptyCover) {
-              console.log('Row ' + (index + 1) + ' has empty cover, skipping video extraction');
-              return '已删除';
-            }
-
-            // 尝试点击播放图标
-            const playIcon = coverElement.querySelector('.cover__icon');
-            
-            if (playIcon) {
-              console.log('Found play icon in row ' + (index + 1) + ', clicking...');
-              // 滚动到元素位置
-              playIcon.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              await sleep(500);
-              // 点击播放图标
-              playIcon.click();
-              console.log('Play icon clicked in row ' + (index + 1) + '!');
-            } else {
-              console.log('No play icon found in row ' + (index + 1) + ', trying cover element...');
-              // 滚动到元素位置
-              coverElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              await sleep(500);
-              // 点击封面元素
-              coverElement.click();
-              console.log('Cover element clicked in row ' + (index + 1) + '!');
-            }
-
-            // 等待弹窗打开
-            await sleep(2000);
-
-            // 查找视频元素
-            const videoElement = document.querySelector('.video-player video');
-            let videoUrl = '';
-            
-            if (videoElement) {
-              videoUrl = videoElement.src || videoElement.currentSrc || '';
-              console.log('Found video URL for row ' + (index + 1) + ':', videoUrl);
-              
-              // 等待2秒再关闭弹窗
-              await sleep(2000);
-            } else {
-              console.log('No video element found for row ' + (index + 1));
-            }
-            
-            // 关闭弹窗
-            const escEvent = new KeyboardEvent('keydown', {
-              key: 'Escape',
-              keyCode: 27,
-              which: 27,
-              bubbles: true
-            });
-            document.dispatchEvent(escEvent);
-            console.log('Popup closed for row ' + (index + 1));
-            
-            // 等待2秒再处理下一个
-            if (index < 10) { // 假设最多10行，避免无限等待
-              await sleep(2000);
-            }
-            
-            return videoUrl;
-          } catch (error) {
-            console.error('Error extracting video URL for row ' + (index + 1) + ':', error);
-            return '';
-          }
-        };
-
         const trList = await waitForRows();
-        const results = [];
-        
-        for (let i = 0; i < trList.length; i++) {
-          const tr = trList[i];
+        return trList.map((tr) => {
           const tds = Array.from(tr.querySelectorAll('td'));
 
           const title = normalize(tr.querySelector('.info__title__text')?.textContent);
@@ -132,20 +45,83 @@ const handleButtonClick = async () => {
 
           const playCount = normalize(tds[1]?.querySelector('.cell')?.textContent);
           const likeCount = normalize(tds[2]?.querySelector('.cell')?.textContent);
-          
-          const videoUrl = await extractVideoUrl(tr, i);
 
-          results.push({title, publishTime, playCount, likeCount, videoUrl});
-        }
-        
-        return results.filter(r => r.title || r.publishTime || r.playCount || r.likeCount);
+          return {title, publishTime, playCount, likeCount};
+        }).filter(r => r.title || r.publishTime || r.playCount || r.likeCount);
       })()`,
       true
     );
 
-    collectedRows.value = Array.isArray(rows) ? rows : [];
+    const safeBaseRows = Array.isArray(baseRows) ? baseRows : [];
+    collectedRows.value = safeBaseRows.map((r) => ({...r, videoUrl: ''}));
     console.table(collectedRows.value);
-    window.electronAPI.sendMessage(`采集到 ${collectedRows.value.length} 条数据`);
+    window.electronAPI.sendMessage(`采集到 ${collectedRows.value.length} 条数据，开始采集视频链接...`);
+
+    for (let i = 0; i < collectedRows.value.length; i++) {
+      const videoUrl = await webview.executeJavaScript(
+        `(async () => {
+          const idx = ${i};
+
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+          const trList = Array.from(document.querySelectorAll('tbody tr.ks-table__row'));
+          const rowElement = trList[idx];
+          if (!rowElement) return '';
+
+          // 已删除检测
+          const deletedTip = rowElement.querySelector('.info__title__tip');
+          if (deletedTip && (deletedTip.textContent || '').includes('作品已删除')) {
+            return '已删除';
+          }
+
+          const coverElement = rowElement.querySelector('.cover');
+          if (!coverElement) return '';
+
+          const emptyCover = coverElement.querySelector('.cover__img--empty');
+          if (emptyCover) {
+            return '已删除';
+          }
+
+          const playIcon = coverElement.querySelector('.cover__icon');
+          if (playIcon) {
+            playIcon.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await sleep(500);
+            playIcon.click();
+          } else {
+            coverElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await sleep(500);
+            coverElement.click();
+          }
+
+          // 弹窗打开后等待2秒再取链接
+          await sleep(2000);
+
+          const videoElement = document.querySelector('.video-player video');
+          const url = (videoElement && (videoElement.src || videoElement.currentSrc)) ? (videoElement.src || videoElement.currentSrc) : '';
+
+          // 再等待2秒再关闭
+          await sleep(2000);
+          const escEvent = new KeyboardEvent('keydown', {
+            key: 'Escape',
+            keyCode: 27,
+            which: 27,
+            bubbles: true
+          });
+          document.dispatchEvent(escEvent);
+
+          return url;
+        })()`,
+        true
+      );
+
+      const normalizedVideoUrl = videoUrl === '已删除' ? '已删除' : (videoUrl ? videoUrl : '无链接');
+      collectedRows.value[i] = {...collectedRows.value[i], videoUrl: normalizedVideoUrl};
+
+      // 行与行之间间隔2秒
+      if (i < collectedRows.value.length - 1) {
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
   } catch (e) {
     console.error('采集失败', e);
     window.electronAPI.sendMessage('采集失败');
@@ -172,9 +148,9 @@ const handleButtonClick = async () => {
       </button>
 
       <div class="result-panel">
-        <div v-if="isCollecting" class="result-hint">采集中...</div>
-        <div v-else-if="collectedRows.length === 0" class="result-hint">暂无数据</div>
-        <table v-else class="result-table">
+        <div v-if="collectedRows.length === 0" class="result-hint">{{ isCollecting ? '采集中...' : '暂无数据' }}</div>
+        <div v-else-if="isCollecting" class="result-hint">采集中...</div>
+        <table v-if="collectedRows.length > 0" class="result-table">
           <thead>
             <tr>
               <th class="col-title">视频名称</th>
@@ -191,9 +167,10 @@ const handleButtonClick = async () => {
               <td class="cell-num">{{ row.playCount }}</td>
               <td class="cell-num">{{ row.likeCount }}</td>
               <td class="cell-video">
-                <a v-if="row.videoUrl && row.videoUrl !== '已删除'" :href="row.videoUrl" target="_blank" class="video-link">查看视频</a>
+                <a v-if="row.videoUrl && row.videoUrl !== '已删除' && row.videoUrl !== '无链接'" :href="row.videoUrl" target="_blank" class="video-link">查看视频</a>
                 <span v-else-if="row.videoUrl === '已删除'" class="deleted-video">已删除</span>
-                <span v-else class="no-video">无链接</span>
+                <span v-else-if="row.videoUrl === '无链接'" class="no-video">无链接</span>
+                <span v-else class="no-video"></span>
               </td>
             </tr>
           </tbody>
@@ -213,7 +190,7 @@ const handleButtonClick = async () => {
 }
 
 .webview-container {
-  width: 70%;
+  width: 65%;
   height: 100%;
   border-right: 1px solid #ccc;
 }
@@ -225,7 +202,7 @@ const handleButtonClick = async () => {
 }
 
 .control-panel {
-  width: 30%;
+  width: 35%;
   height: 100%;
   padding: 20px;
   display: flex;
