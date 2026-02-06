@@ -5,7 +5,7 @@ window.electronAPI.sendMessage('App loaded with webview layout!');
 
 const webviewRef = ref<any>(null);
 const isCollecting = ref(false);
-const collectedRows = ref<Array<{ title: string; publishTime: string; playCount: string; likeCount: string }>>([]);
+const collectedRows = ref<Array<{ title: string; publishTime: string; playCount: string; likeCount: string; videoUrl: string }>>([]);
 
 const handleButtonClick = async () => {
   const webview = webviewRef.value;
@@ -18,7 +18,7 @@ const handleButtonClick = async () => {
     isCollecting.value = true;
     const rows = await webview.executeJavaScript(
       `(async () => {
-        const normalize = (s) => (s ?? '').toString().replace(/\s+/g, ' ').trim();
+        const normalize = (s) => (s ?? '').toString().replace(/\\s+/g, ' ').trim();
 
         const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -35,8 +35,81 @@ const handleButtonClick = async () => {
           return [];
         };
 
+        const extractVideoUrl = async (rowElement, index) => {
+          try {
+            console.log('Processing row ' + (index + 1));
+            
+            const coverElement = rowElement.querySelector('.cover');
+            if (!coverElement) {
+              console.log('No cover element found in row ' + (index + 1));
+              return '';
+            }
+
+            // 尝试点击播放图标
+            const playIcon = coverElement.querySelector('.cover__icon');
+            
+            if (playIcon) {
+              console.log('Found play icon in row ' + (index + 1) + ', clicking...');
+              // 滚动到元素位置
+              playIcon.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              await sleep(500);
+              // 点击播放图标
+              playIcon.click();
+              console.log('Play icon clicked in row ' + (index + 1) + '!');
+            } else {
+              console.log('No play icon found in row ' + (index + 1) + ', trying cover element...');
+              // 滚动到元素位置
+              coverElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              await sleep(500);
+              // 点击封面元素
+              coverElement.click();
+              console.log('Cover element clicked in row ' + (index + 1) + '!');
+            }
+
+            // 等待弹窗打开
+            await sleep(2000);
+
+            // 查找视频元素
+            const videoElement = document.querySelector('.video-player video');
+            let videoUrl = '';
+            
+            if (videoElement) {
+              videoUrl = videoElement.src || videoElement.currentSrc || '';
+              console.log('Found video URL for row ' + (index + 1) + ':', videoUrl);
+              
+              // 等待2秒再关闭弹窗
+              await sleep(2000);
+            } else {
+              console.log('No video element found for row ' + (index + 1));
+            }
+            
+            // 关闭弹窗
+            const escEvent = new KeyboardEvent('keydown', {
+              key: 'Escape',
+              keyCode: 27,
+              which: 27,
+              bubbles: true
+            });
+            document.dispatchEvent(escEvent);
+            console.log('Popup closed for row ' + (index + 1));
+            
+            // 等待2秒再处理下一个
+            if (index < 10) { // 假设最多10行，避免无限等待
+              await sleep(2000);
+            }
+            
+            return videoUrl;
+          } catch (error) {
+            console.error('Error extracting video URL for row ' + (index + 1) + ':', error);
+            return '';
+          }
+        };
+
         const trList = await waitForRows();
-        return trList.map((tr) => {
+        const results = [];
+        
+        for (let i = 0; i < trList.length; i++) {
+          const tr = trList[i];
           const tds = Array.from(tr.querySelectorAll('td'));
 
           const title = normalize(tr.querySelector('.info__title__text')?.textContent);
@@ -45,9 +118,13 @@ const handleButtonClick = async () => {
 
           const playCount = normalize(tds[1]?.querySelector('.cell')?.textContent);
           const likeCount = normalize(tds[2]?.querySelector('.cell')?.textContent);
+          
+          const videoUrl = await extractVideoUrl(tr, i);
 
-          return {title, publishTime, playCount, likeCount};
-        }).filter(r => r.title || r.publishTime || r.playCount || r.likeCount);
+          results.push({title, publishTime, playCount, likeCount, videoUrl});
+        }
+        
+        return results.filter(r => r.title || r.publishTime || r.playCount || r.likeCount);
       })()`,
       true
     );
@@ -90,6 +167,7 @@ const handleButtonClick = async () => {
               <th class="col-time">发布时间</th>
               <th class="col-num">播放量</th>
               <th class="col-num">点赞量</th>
+              <th class="col-video">视频链接</th>
             </tr>
           </thead>
           <tbody>
@@ -98,6 +176,10 @@ const handleButtonClick = async () => {
               <td class="cell-time">{{ row.publishTime }}</td>
               <td class="cell-num">{{ row.playCount }}</td>
               <td class="cell-num">{{ row.likeCount }}</td>
+              <td class="cell-video">
+                <a v-if="row.videoUrl" :href="row.videoUrl" target="_blank" class="video-link">查看视频</a>
+                <span v-else class="no-video">无链接</span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -176,15 +258,19 @@ const handleButtonClick = async () => {
 }
 
 .col-title {
-  width: 46%;
+  width: 36%;
 }
 
 .col-time {
-  width: 22%;
+  width: 18%;
 }
 
 .col-num {
-  width: 16%;
+  width: 14%;
+}
+
+.col-video {
+  width: 18%;
 }
 
 .cell-title {
@@ -198,6 +284,31 @@ const handleButtonClick = async () => {
 .cell-num {
   text-align: right;
   white-space: nowrap;
+}
+
+.cell-video {
+  text-align: center;
+  padding: 8px 4px;
+}
+
+.video-link {
+  color: #007bff;
+  text-decoration: none;
+  font-size: 12px;
+  padding: 2px 6px;
+  border: 1px solid #007bff;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.video-link:hover {
+  background-color: #007bff;
+  color: white;
+}
+
+.no-video {
+  color: #999;
+  font-size: 12px;
 }
 
 .control-button {
