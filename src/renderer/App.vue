@@ -39,10 +39,24 @@ const handleButtonClick = async () => {
           try {
             console.log('Processing row ' + (index + 1));
             
+            // 检查是否为已删除的视频
+            const deletedTip = rowElement.querySelector('.info__title__tip');
+            if (deletedTip && deletedTip.textContent.includes('作品已删除')) {
+              console.log('Row ' + (index + 1) + ' is deleted, skipping video extraction');
+              return '已删除';
+            }
+            
             const coverElement = rowElement.querySelector('.cover');
             if (!coverElement) {
               console.log('No cover element found in row ' + (index + 1));
               return '';
+            }
+
+            // 检查封面是否为空（已删除的视频通常有空的封面）
+            const emptyCover = coverElement.querySelector('.cover__img--empty');
+            if (emptyCover) {
+              console.log('Row ' + (index + 1) + ' has empty cover, skipping video extraction');
+              return '已删除';
             }
 
             // 尝试点击播放图标
@@ -177,7 +191,8 @@ const handleButtonClick = async () => {
               <td class="cell-num">{{ row.playCount }}</td>
               <td class="cell-num">{{ row.likeCount }}</td>
               <td class="cell-video">
-                <a v-if="row.videoUrl" :href="row.videoUrl" target="_blank" class="video-link">查看视频</a>
+                <a v-if="row.videoUrl && row.videoUrl !== '已删除'" :href="row.videoUrl" target="_blank" class="video-link">查看视频</a>
+                <span v-else-if="row.videoUrl === '已删除'" class="deleted-video">已删除</span>
                 <span v-else class="no-video">无链接</span>
               </td>
             </tr>
@@ -309,6 +324,12 @@ const handleButtonClick = async () => {
 .no-video {
   color: #999;
   font-size: 12px;
+}
+
+.deleted-video {
+  color: #ff4757;
+  font-size: 12px;
+  font-weight: bold;
 }
 
 .control-button {
