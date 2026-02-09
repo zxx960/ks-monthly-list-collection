@@ -318,11 +318,29 @@ ipcMain.handle('upload-videos-to-baidu', async (_event, rows) => {
   let failCount = 0;
   let skipCount = 0;
 
+  const emitProgress = (index) => {
+    try {
+      _event?.sender?.send('upload-videos-to-baidu-progress', {
+        index,
+        row: resultRows[index],
+        summary: {
+          total: resultRows.length,
+          success: successCount,
+          failed: failCount,
+          skipped: skipCount
+        }
+      });
+    } catch {
+      // ignore
+    }
+  };
+
   for (let i = 0; i < resultRows.length; i++) {
     const row = resultRows[i];
     if (!isVideoUrlRow(row)) {
       resultRows[i] = {...row, shareUrl: row.videoUrl === '已删除' ? '已删除' : '无链接'};
       skipCount++;
+      emitProgress(i);
       continue;
     }
 
@@ -337,10 +355,12 @@ ipcMain.handle('upload-videos-to-baidu', async (_event, rows) => {
       const shareUrl = await createBaiduShareLink(fsid);
       resultRows[i] = {...row, shareUrl};
       successCount++;
+      emitProgress(i);
     } catch (err) {
       console.error(`上传百度网盘失败 index=${i}`, err);
       resultRows[i] = {...row, shareUrl: '上传失败'};
       failCount++;
+      emitProgress(i);
     } finally {
       await fsp.unlink(localFile).catch(() => {});
     }

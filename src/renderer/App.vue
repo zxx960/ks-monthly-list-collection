@@ -22,6 +22,12 @@ const modalVisible = ref(false);
 const modalMessage = ref('');
 const collectedRows = ref<RowItem[]>([]);
 
+type UploadProgressPayload = {
+  index: number;
+  row: RowItem;
+  summary?: {total: number; success: number; failed: number; skipped: number};
+};
+
 const showModal = (message: string) => {
   modalMessage.value = message;
   modalVisible.value = true;
@@ -328,8 +334,18 @@ const handleUploadToBaiduClick = async () => {
   if (isCollecting.value || isCleaning.value || isUploadingToBaidu.value) return;
   if (!collectedRows.value.length) return;
 
+  let unsubscribeProgress: null | (() => void) = null;
   try {
     isUploadingToBaidu.value = true;
+
+    unsubscribeProgress = window.electronAPI.onUploadVideosToBaiduProgress((payload: UploadProgressPayload) => {
+      const index = Number(payload?.index);
+      if (!Number.isFinite(index) || index < 0) return;
+      if (!payload?.row) return;
+      if (!collectedRows.value[index]) return;
+      collectedRows.value[index] = {...collectedRows.value[index], ...payload.row};
+    });
+
     const payload = collectedRows.value.map((row) => ({
       title: row.title,
       publishTime: row.publishTime,
@@ -349,6 +365,13 @@ const handleUploadToBaiduClick = async () => {
     console.error('上传百度网盘失败', e);
     showModal('上传百度网盘失败，请查看控制台日志');
   } finally {
+    if (unsubscribeProgress) {
+      try {
+        unsubscribeProgress();
+      } catch {
+        // ignore
+      }
+    }
     isUploadingToBaidu.value = false;
   }
 };
@@ -467,7 +490,7 @@ const handleUploadToBaiduClick = async () => {
 }
 
 .webview-container {
-  width: 65%;
+  width: 60%;
   height: 100%;
   border-right: 1px solid #ccc;
 }
