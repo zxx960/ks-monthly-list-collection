@@ -1,16 +1,26 @@
 <script setup lang="ts">
 import {ref} from 'vue';
 
+type RowItem = {
+  title: string;
+  publishTime: string;
+  playCount: string;
+  likeCount: string;
+  videoUrl: string;
+  shareUrl: string;
+};
+
 window.electronAPI.sendMessage('App loaded with webview layout!');
 
 const webviewRef = ref<any>(null);
 const isCollecting = ref(false);
 const isCleaning = ref(false);
+const isUploadingToBaidu = ref(false);
 const pageCount = ref<number>(1);
 const cleaningProgress = ref<{ total: number; done: number }>({total: 0, done: 0});
 const modalVisible = ref(false);
 const modalMessage = ref('');
-const collectedRows = ref<Array<{ title: string; publishTime: string; playCount: string; likeCount: string; videoUrl: string }>>([]);
+const collectedRows = ref<RowItem[]>([]);
 
 const showModal = (message: string) => {
   modalMessage.value = message;
@@ -279,7 +289,7 @@ const handleButtonClick = async () => {
         prevFirstTitle = (baseRowsOnPage[0]?.title ?? '').toString();
       }
 
-      collectedRows.value.push(...baseRowsOnPage.map((r) => ({...r, videoUrl: ''})));
+      collectedRows.value.push(...baseRowsOnPage.map((r) => ({...r, videoUrl: '', shareUrl: ''})));
       window.electronAPI.sendMessage(`第 ${page + 1} 页采集到 ${baseRowsOnPage.length} 条数据，开始采集视频链接...`);
 
       for (let i = 0; i < baseRowsOnPage.length; i++) {
@@ -311,6 +321,35 @@ const handleButtonClick = async () => {
     window.electronAPI.sendMessage('采集失败');
   } finally {
     isCollecting.value = false;
+  }
+};
+
+const handleUploadToBaiduClick = async () => {
+  if (isCollecting.value || isCleaning.value || isUploadingToBaidu.value) return;
+  if (!collectedRows.value.length) return;
+
+  try {
+    isUploadingToBaidu.value = true;
+    const payload = collectedRows.value.map((row) => ({
+      title: row.title,
+      publishTime: row.publishTime,
+      playCount: row.playCount,
+      likeCount: row.likeCount,
+      videoUrl: row.videoUrl,
+      shareUrl: row.shareUrl
+    }));
+    const result = await window.electronAPI.uploadVideosToBaidu(payload);
+    if (result?.rows && Array.isArray(result.rows)) {
+      collectedRows.value = result.rows;
+    }
+
+    const summary = result?.summary || {success: 0, failed: 0, skipped: 0};
+    showModal(`上传完成：成功 ${summary.success} 条，失败 ${summary.failed} 条，跳过 ${summary.skipped} 条`);
+  } catch (e) {
+    console.error('上传百度网盘失败', e);
+    showModal('上传百度网盘失败，请查看控制台日志');
+  } finally {
+    isUploadingToBaidu.value = false;
   }
 };
 </script>
@@ -346,15 +385,18 @@ const handleButtonClick = async () => {
           min="1"
           step="1"
           class="page-input"
-          :disabled="isCollecting || isCleaning"
+          :disabled="isCollecting || isCleaning || isUploadingToBaidu"
         />
       </div>
       <div class="action-row">
-        <button @click="handleButtonClick" class="control-button action-button" :disabled="isCollecting || isCleaning">
+        <button @click="handleButtonClick" class="control-button action-button" :disabled="isCollecting || isCleaning || isUploadingToBaidu">
           采集数据
         </button>
-        <button @click="handleCleanButtonClick" class="control-button clean-button action-button" :disabled="isCollecting || isCleaning || collectedRows.length === 0 || !arkApiKey.trim()">
+        <button @click="handleCleanButtonClick" class="control-button clean-button action-button" :disabled="isCollecting || isCleaning || isUploadingToBaidu || collectedRows.length === 0 || !arkApiKey.trim()">
           {{ isCleaning ? '清洗中...' : '数据清洗' }}
+        </button>
+        <button @click="handleUploadToBaiduClick" class="control-button baidu-button action-button" :disabled="isCollecting || isCleaning || isUploadingToBaidu || collectedRows.length === 0">
+          {{ isUploadingToBaidu ? '上传中...' : '上传百度网盘' }}
         </button>
       </div>
 
@@ -363,12 +405,12 @@ const handleButtonClick = async () => {
           v-model="arkApiKey"
           class="ark-key-input"
           placeholder="Ark API Key（必填，用于大模型清洗）"
-          :disabled="isCollecting || isCleaning"
+          :disabled="isCollecting || isCleaning || isUploadingToBaidu"
         />
-        <button type="button" class="ark-key-action" @click="saveArkApiKey" :disabled="isCollecting || isCleaning">
+        <button type="button" class="ark-key-action" @click="saveArkApiKey" :disabled="isCollecting || isCleaning || isUploadingToBaidu">
           保存
         </button>
-        <button type="button" class="ark-key-action" @click="clearArkApiKey" :disabled="isCollecting || isCleaning">
+        <button type="button" class="ark-key-action" @click="clearArkApiKey" :disabled="isCollecting || isCleaning || isUploadingToBaidu">
           清除
         </button>
       </div>
@@ -377,6 +419,7 @@ const handleButtonClick = async () => {
         <div v-if="collectedRows.length === 0" class="result-hint">{{ isCollecting ? '采集中...' : '暂无数据' }}</div>
         <div v-else-if="isCollecting" class="result-hint">采集中...</div>
         <div v-else-if="isCleaning" class="result-hint">清洗中... ({{ cleaningProgress.done }}/{{ cleaningProgress.total }})</div>
+        <div v-else-if="isUploadingToBaidu" class="result-hint">上传百度网盘中...</div>
         <table v-if="collectedRows.length > 0" class="result-table">
           <thead>
             <tr>
@@ -385,6 +428,7 @@ const handleButtonClick = async () => {
               <th class="col-num">播放量</th>
               <th class="col-num">点赞量</th>
               <th class="col-video">视频链接</th>
+              <th class="col-share">分享链接</th>
             </tr>
           </thead>
           <tbody>
@@ -397,6 +441,12 @@ const handleButtonClick = async () => {
                 <a v-if="row.videoUrl && row.videoUrl !== '已删除' && row.videoUrl !== '无链接'" :href="row.videoUrl" target="_blank" class="video-link">查看视频</a>
                 <span v-else-if="row.videoUrl === '已删除'" class="deleted-video">已删除</span>
                 <span v-else-if="row.videoUrl === '无链接'" class="no-video">无链接</span>
+                <span v-else class="no-video"></span>
+              </td>
+              <td class="cell-video">
+                <a v-if="row.shareUrl && row.shareUrl !== '上传失败' && row.shareUrl !== '已删除' && row.shareUrl !== '无链接'" :href="row.shareUrl" target="_blank" class="video-link">查看分享</a>
+                <span v-else-if="row.shareUrl === '上传失败'" class="deleted-video">上传失败</span>
+                <span v-else-if="row.shareUrl === '已删除' || row.shareUrl === '无链接'" class="no-video">{{ row.shareUrl }}</span>
                 <span v-else class="no-video"></span>
               </td>
             </tr>
@@ -541,7 +591,11 @@ const handleButtonClick = async () => {
 }
 
 .col-video {
-  width: 18%;
+  width: 16%;
+}
+
+.col-share {
+  width: 16%;
 }
 
 .cell-title {
@@ -682,6 +736,14 @@ const handleButtonClick = async () => {
 
 .clean-button:hover {
   background-color: #5a6268;
+}
+
+.baidu-button {
+  background-color: #198754;
+}
+
+.baidu-button:hover {
+  background-color: #157347;
 }
 
 .control-button:disabled {
