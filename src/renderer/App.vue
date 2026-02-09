@@ -582,6 +582,7 @@ const handleUploadToBaiduClick = async () => {
 
 .result-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   background: #fff;
 }
@@ -600,26 +601,27 @@ const handleUploadToBaiduClick = async () => {
   top: 0;
   background: #fafafa;
   z-index: 1;
+  white-space: nowrap;
 }
 
 .col-title {
-  width: 30%;
+  width: 34%;
 }
 
 .col-time {
-  width: 14%;
+  width: 12%;
 }
 
 .col-num {
-  width: 14%;
+  width: 12%;
 }
 
 .col-video {
-  width: 16%;
+  width: 15%;
 }
 
 .col-share {
-  width: 26%;
+  width: 15%;
 }
 
 .result-table td.cell-title {
