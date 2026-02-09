@@ -1,20 +1,13 @@
 ﻿// file: create-share-link.js
 // 说明：Node 18+，使用内置 fetch/FormData
-// 用法（PowerShell）:
-// $env:ACCESS_TOKEN="你的token"
-// $env:FSID_LIST='["1234567","7654321"]'  // 必填，json 字符串数组
-// $env:PERIOD="7"  // 必填，分享天数
-// $env:PWD="12zx"  // 必填，4位数字+小写字母
-// node .\create-share-link.js
-// 可选：$env:APP_ID="250529"  默认 250529
-// 可选：$env:REMARK="备注"
+// 用法：直接修改下方常量后运行 node .\create-share-link.js
 
-const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
-const FSID_LIST = process.env.FSID_LIST;
-const PERIOD = process.env.PERIOD;
-const PWD = process.env.PWD;
-const APP_ID = process.env.APP_ID || "250529";
-const REMARK = process.env.REMARK;
+const ACCESS_TOKEN = "123.640e5b8e3e25f87b21832024eba42787.YHUs-QpgoFt2Qv5sSwHM1ReZld99NwVfoAjIezA.GyBP1w";
+const FSID_LIST = '["1234567","7654321"]';
+const PERIOD = "7";
+const PWD = "12zx";
+const APP_ID = "122053376";
+const REMARK = "";
 
 if (!ACCESS_TOKEN) {
   console.error("缺少 ACCESS_TOKEN 环境变量");

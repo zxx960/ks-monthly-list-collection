@@ -1,18 +1,13 @@
 ﻿// file: get-upload-domain.js
-// 用法（PowerShell）:
-// $env:ACCESS_TOKEN="你的token"
-// $env:LOCAL_FILE="C:\\path\\to\\file.jpg"
-// $env:UPLOAD_PATH="/apps/appName/filename.jpg"
-// node .\get-upload-domain.js
-// 可选：$env:APP_ID="250528"  默认 250528
+// 用法：直接修改下方常量后运行 node .\get-upload-domain.js
 
 const fs = require("fs");
 const crypto = require("crypto");
 
-const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
-const LOCAL_FILE = process.env.LOCAL_FILE;
-let UPLOAD_PATH = process.env.UPLOAD_PATH;
-const APP_ID = process.env.APP_ID || "250528";
+const ACCESS_TOKEN = "123.640e5b8e3e25f87b21832024eba42787.YHUs-QpgoFt2Qv5sSwHM1ReZld99NwVfoAjIezA.GyBP1w";
+const LOCAL_FILE = "";
+let UPLOAD_PATH = "";
+const APP_ID = "122053376";
 
 if (!ACCESS_TOKEN) {
   console.error("缺少 ACCESS_TOKEN 环境变量");

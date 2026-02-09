@@ -1,10 +1,8 @@
 ﻿// file: get-user-info.js
-// 用法（PowerShell）:
-// $env:ACCESS_TOKEN="你的token"; node get-user-info.js
-// 可选：$env:VIP_VERSION="v2"
+// 用法：直接修改下方常量后运行 node get-user-info.js
 
-const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
-const VIP_VERSION = process.env.VIP_VERSION || "v2";
+const ACCESS_TOKEN = "123.640e5b8e3e25f87b21832024eba42787.YHUs-QpgoFt2Qv5sSwHM1ReZld99NwVfoAjIezA.GyBP1w";
+const VIP_VERSION = "v2";
 
 if (!ACCESS_TOKEN) {
   console.error("缺少 ACCESS_TOKEN 环境变量");

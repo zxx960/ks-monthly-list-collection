@@ -1,21 +1,18 @@
 ﻿// file: upload-file.js
 // 说明：Node 18+，使用内置 fetch
-// 用法（PowerShell）:
-// $env:ACCESS_TOKEN="你的token"
-// $env:LOCAL_FILE="C:\\path\\file.mp4"
-// $env:UPLOAD_PATH="/apps/appName/file.mp4"
-// node .\upload-file.js
-// 可选：$env:APP_ID="250528"  默认 250528
-// 可选：$env:UPLOAD_HOST="https://c3.pcs.baidu.com"  不设则自动 locateupload
+// 用法：直接修改下方常量后运行 node .\upload-file.js
 
 const fs = require("fs");
 const crypto = require("crypto");
 
-const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
-const LOCAL_FILE = process.env.LOCAL_FILE;
-let UPLOAD_PATH = process.env.UPLOAD_PATH;
-const APP_ID = process.env.APP_ID || "250528";
-const UPLOAD_HOST = process.env.UPLOAD_HOST; // 可选
+const ACCESS_TOKEN = "123.640e5b8e3e25f87b21832024eba42787.YHUs-QpgoFt2Qv5sSwHM1ReZld99NwVfoAjIezA.GyBP1w";
+const LOCAL_FILE = "";
+let UPLOAD_PATH = "";
+const APP_ID = "122053376";
+const APP_KEY = "NQ5eywTG2zzKSCiz22cpoBj7ZQupLBzr";
+const SECRET_KEY = "DrrX3hrIABYAY5E4aRA63UJXiaC4U8fO";
+const SIGN_KEY = "CsNfPMcPHn#l--e*X@pSJy-*yPucKw*F@";
+const UPLOAD_HOST = ""; // 可选，例如 "https://c3.pcs.baidu.com"
 
 if (!ACCESS_TOKEN) {
   console.error("缺少 ACCESS_TOKEN 环境变量");
