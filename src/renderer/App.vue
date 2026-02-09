@@ -591,7 +591,8 @@ const handleUploadToBaiduClick = async () => {
   border: 1px solid #e5e5e5;
   padding: 8px;
   font-size: 12px;
-  vertical-align: top;
+  vertical-align: middle;
+  text-align: center;
 }
 
 .result-table th {
@@ -602,11 +603,11 @@ const handleUploadToBaiduClick = async () => {
 }
 
 .col-title {
-  width: 36%;
+  width: 30%;
 }
 
 .col-time {
-  width: 18%;
+  width: 14%;
 }
 
 .col-num {
@@ -618,11 +619,12 @@ const handleUploadToBaiduClick = async () => {
 }
 
 .col-share {
-  width: 16%;
+  width: 26%;
 }
 
-.cell-title {
+.result-table td.cell-title {
   word-break: break-word;
+  text-align: left;
 }
 
 .cell-time {
@@ -630,7 +632,7 @@ const handleUploadToBaiduClick = async () => {
 }
 
 .cell-num {
-  text-align: right;
+  text-align: center;
   white-space: nowrap;
 }
 
