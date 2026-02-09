@@ -466,8 +466,8 @@ const handleUploadToBaiduClick = async () => {
                 <span v-else-if="row.videoUrl === '无链接'" class="no-video">无链接</span>
                 <span v-else class="no-video"></span>
               </td>
-              <td class="cell-video">
-                <a v-if="row.shareUrl && row.shareUrl !== '上传失败' && row.shareUrl !== '已删除' && row.shareUrl !== '无链接'" :href="row.shareUrl" target="_blank" class="video-link">查看分享</a>
+              <td class="cell-share">
+                <a v-if="row.shareUrl && row.shareUrl !== '上传失败' && row.shareUrl !== '已删除' && row.shareUrl !== '无链接'" :href="row.shareUrl" target="_blank" class="share-link" :title="row.shareUrl">{{ row.shareUrl }}</a>
                 <span v-else-if="row.shareUrl === '上传失败'" class="deleted-video">上传失败</span>
                 <span v-else-if="row.shareUrl === '已删除' || row.shareUrl === '无链接'" class="no-video">{{ row.shareUrl }}</span>
                 <span v-else class="no-video"></span>
@@ -638,6 +638,10 @@ const handleUploadToBaiduClick = async () => {
   white-space: nowrap;
 }
 
+.result-table td.cell-share {
+  word-break: break-all;
+}
+
 .cell-video {
   text-align: center;
   padding: 8px 4px;
@@ -651,6 +655,12 @@ const handleUploadToBaiduClick = async () => {
   border: 1px solid #007bff;
   border-radius: 3px;
   display: inline-block;
+}
+
+.share-link {
+  color: #007bff;
+  text-decoration: underline;
+  font-size: 12px;
 }
 
 .video-link:hover {
