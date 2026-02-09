@@ -33,11 +33,16 @@ function randomSharePwd() {
 }
 
 function safeName(input) {
-  return (input || 'video')
+  const normalized = (input || 'video').toString().normalize('NFKC');
+  const cleaned = normalized
     .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/[^\p{L}\p{N}._\- ]+/gu, '_')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 80) || 'video';
+    .replace(/[ ._\-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 50);
+  return cleaned || 'video';
 }
 
 function isVideoUrlRow(row) {
