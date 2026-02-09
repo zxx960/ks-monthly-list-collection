@@ -554,7 +554,7 @@ const handleUploadToBaiduClick = async () => {
 }
 
 .control-panel {
-  width: 35%;
+  width: 40%;
   height: 100%;
   padding: 20px;
   display: flex;
