@@ -4,7 +4,7 @@ declare global {
   interface Window {
     electronAPI: {
       sendMessage: (message: string) => void;
-      uploadVideosToBaidu: (rows: any[]) => Promise<any>;
+      uploadVideosToBaidu: (payload: {rows: any[]; accessToken: string} | any[]) => Promise<any>;
       onUploadVideosToBaiduProgress: (listener: (payload: any) => void) => () => void;
     };
   }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {ref} from 'vue';
+import {ref, watch} from 'vue';
 import * as XLSX from 'xlsx';
 
 type RowItem = {
@@ -39,20 +39,45 @@ const closeModal = () => {
 };
 
 const arkApiKey = ref<string>((localStorage.getItem('ARK_API_KEY') || '').trim());
+const baiduAccessToken = ref<string>((localStorage.getItem('BAIDU_ACCESS_TOKEN') || '').trim());
 
-const saveArkApiKey = () => {
-  const key = (arkApiKey.value || '').trim();
-  if (key) {
-    localStorage.setItem('ARK_API_KEY', key);
-  } else {
-    localStorage.removeItem('ARK_API_KEY');
-  }
-};
+let arkApiKeySaveTimer: number | null = null;
+watch(
+  arkApiKey,
+  (val) => {
+    if (arkApiKeySaveTimer) {
+      window.clearTimeout(arkApiKeySaveTimer);
+    }
+    arkApiKeySaveTimer = window.setTimeout(() => {
+      const key = (val || '').trim();
+      if (key) {
+        localStorage.setItem('ARK_API_KEY', key);
+      } else {
+        localStorage.removeItem('ARK_API_KEY');
+      }
+    }, 300);
+  },
+  {immediate: false}
+);
 
-const clearArkApiKey = () => {
-  arkApiKey.value = '';
-  localStorage.removeItem('ARK_API_KEY');
-};
+let baiduAccessTokenSaveTimer: number | null = null;
+watch(
+  baiduAccessToken,
+  (val) => {
+    if (baiduAccessTokenSaveTimer) {
+      window.clearTimeout(baiduAccessTokenSaveTimer);
+    }
+    baiduAccessTokenSaveTimer = window.setTimeout(() => {
+      const token = (val || '').trim();
+      if (token) {
+        localStorage.setItem('BAIDU_ACCESS_TOKEN', token);
+      } else {
+        localStorage.removeItem('BAIDU_ACCESS_TOKEN');
+      }
+    }, 300);
+  },
+  {immediate: false}
+);
 
 const extractJsonFromText = (text: string) => {
   const m = (text || '').match(/\{[\s\S]*\}/);
@@ -104,7 +129,7 @@ const handleCleanButtonClick = async () => {
 
   const apiKey = (arkApiKey.value || '').trim();
   if (!apiKey) {
-    window.electronAPI.sendMessage('请先填写并保存 Ark API Key');
+    window.electronAPI.sendMessage('请先填写 Ark API Key');
     return;
   }
 
@@ -335,6 +360,12 @@ const handleUploadToBaiduClick = async () => {
   if (isCollecting.value || isCleaning.value || isUploadingToBaidu.value) return;
   if (!collectedRows.value.length) return;
 
+  const accessToken = (baiduAccessToken.value || '').trim();
+  if (!accessToken) {
+    window.electronAPI.sendMessage('请先填写 百度 ACCESS_TOKEN');
+    return;
+  }
+
   let unsubscribeProgress: null | (() => void) = null;
   try {
     isUploadingToBaidu.value = true;
@@ -347,7 +378,7 @@ const handleUploadToBaiduClick = async () => {
       collectedRows.value[index] = {...collectedRows.value[index], ...payload.row};
     });
 
-    const payload = collectedRows.value.map((row) => ({
+    const rows = collectedRows.value.map((row) => ({
       title: row.title,
       publishTime: row.publishTime,
       playCount: row.playCount,
@@ -355,7 +386,7 @@ const handleUploadToBaiduClick = async () => {
       videoUrl: row.videoUrl,
       shareUrl: row.shareUrl
     }));
-    const result = await window.electronAPI.uploadVideosToBaidu(payload);
+    const result = await window.electronAPI.uploadVideosToBaidu({rows, accessToken});
     if (result?.rows && Array.isArray(result.rows)) {
       collectedRows.value = result.rows;
     }
@@ -434,24 +465,46 @@ const handleExportExcelClick = () => {
     </div>
     <div class="control-panel">
       <h2>鱼粉快手月榜单采集</h2>
-      <div class="collect-row">
-        <div class="page-input-row">
-          <label class="page-input-label" for="page-count-input">采集页数</label>
+
+      <div class="ark-key-panel">
+        <div class="key-field">
+          <label class="key-label" for="ark-api-key-input">火山 API Key</label>
           <input
-            id="page-count-input"
-            v-model.number="pageCount"
-            type="number"
-            min="1"
-            step="1"
-            class="page-input"
+            id="ark-api-key-input"
+            v-model="arkApiKey"
+            class="ark-key-input"
+            placeholder="Ark API Key（必填，用于大模型清洗）"
             :disabled="isCollecting || isCleaning || isUploadingToBaidu"
           />
         </div>
-        <button @click="handleButtonClick" class="control-button collect-button" :disabled="isCollecting || isCleaning || isUploadingToBaidu">
-          采集数据
-        </button>
+        <div class="key-field">
+          <label class="key-label" for="baidu-access-token-input">百度 ACCESS_TOKEN</label>
+          <input
+            id="baidu-access-token-input"
+            v-model="baiduAccessToken"
+            class="ark-key-input"
+            placeholder="百度 ACCESS_TOKEN（必填，用于百度网盘上传）"
+            :disabled="isCollecting || isCleaning || isUploadingToBaidu"
+          />
+        </div>
+      </div>
+
+      <div class="page-input-row">
+        <label class="page-input-label" for="page-count-input">采集页数</label>
+        <input
+          id="page-count-input"
+          v-model.number="pageCount"
+          type="number"
+          min="1"
+          step="1"
+          class="page-input"
+          :disabled="isCollecting || isCleaning || isUploadingToBaidu"
+        />
       </div>
       <div class="action-row">
+        <button @click="handleButtonClick" class="control-button action-button" :disabled="isCollecting || isCleaning || isUploadingToBaidu">
+          采集数据
+        </button>
         <button @click="handleCleanButtonClick" class="control-button clean-button action-button" :disabled="isCollecting || isCleaning || isUploadingToBaidu || collectedRows.length === 0 || !arkApiKey.trim()">
           {{ isCleaning ? '清洗中...' : '数据清洗' }}
         </button>
@@ -460,21 +513,6 @@ const handleExportExcelClick = () => {
         </button>
         <button @click="handleExportExcelClick" class="control-button export-button action-button" :disabled="isCollecting || isCleaning || isUploadingToBaidu || collectedRows.length === 0">
           导出Excel
-        </button>
-      </div>
-
-      <div class="ark-key-panel">
-        <input
-          v-model="arkApiKey"
-          class="ark-key-input"
-          placeholder="Ark API Key（必填，用于大模型清洗）"
-          :disabled="isCollecting || isCleaning || isUploadingToBaidu"
-        />
-        <button type="button" class="ark-key-action" @click="saveArkApiKey" :disabled="isCollecting || isCleaning || isUploadingToBaidu">
-          保存
-        </button>
-        <button type="button" class="ark-key-action" @click="clearArkApiKey" :disabled="isCollecting || isCleaning || isUploadingToBaidu">
-          清除
         </button>
       </div>
 
@@ -736,24 +774,12 @@ const handleExportExcelClick = () => {
   gap: 10px;
 }
 
-.collect-row {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
 .page-input-row {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.collect-row .page-input-row {
-  flex: 1;
-  margin-bottom: 0;
+  margin-bottom: 10px;
 }
 
 .page-input-label {
@@ -779,22 +805,36 @@ const handleExportExcelClick = () => {
 
 .action-button {
   flex: 1;
-  padding: 12px 0;
-}
-
-.collect-button {
-  flex: 0 0 auto;
+  padding: 8px 0;
+  font-size: 14px;
 }
 
 .ark-key-panel {
   width: 100%;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
+  margin-bottom: 14px;
+}
+
+.key-field {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.key-label {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: #333;
+  white-space: nowrap;
 }
 
 .ark-key-input {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   height: 32px;
   padding: 0 10px;

@@ -15,6 +15,10 @@ const BAIDU_SHARE_PERIOD = '7';
 const FOUR_MB = 4 * 1024 * 1024;
 const SLICE = 256 * 1024;
 
+function normalizeAccessToken(accessToken) {
+  return (accessToken || BAIDU_ACCESS_TOKEN || '').toString().trim();
+}
+
 function md5(buf) {
   return crypto.createHash('md5').update(buf).digest('hex');
 }
@@ -76,10 +80,11 @@ async function downloadVideoToFile(videoUrl, filePath) {
   await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(filePath));
 }
 
-async function baiduPrecreate({uploadPath, size, blockList, contentMd5, sliceMd5}) {
+async function baiduPrecreate({uploadPath, size, blockList, contentMd5, sliceMd5, accessToken}) {
+  const token = normalizeAccessToken(accessToken);
   const url = new URL('https://pan.baidu.com/rest/2.0/xpan/file');
   url.searchParams.set('method', 'precreate');
-  url.searchParams.set('access_token', BAIDU_ACCESS_TOKEN);
+  url.searchParams.set('access_token', token);
 
   const body = new URLSearchParams();
   body.set('path', uploadPath);
@@ -103,11 +108,12 @@ async function baiduPrecreate({uploadPath, size, blockList, contentMd5, sliceMd5
   return res.json();
 }
 
-async function baiduLocateUpload({uploadPath, uploadid}) {
+async function baiduLocateUpload({uploadPath, uploadid, accessToken}) {
+  const token = normalizeAccessToken(accessToken);
   const url = new URL('https://d.pcs.baidu.com/rest/2.0/pcs/file');
   url.searchParams.set('method', 'locateupload');
   url.searchParams.set('appid', BAIDU_APP_ID);
-  url.searchParams.set('access_token', BAIDU_ACCESS_TOKEN);
+  url.searchParams.set('access_token', token);
   url.searchParams.set('path', uploadPath);
   url.searchParams.set('uploadid', uploadid);
   url.searchParams.set('upload_version', '2.0');
@@ -116,10 +122,11 @@ async function baiduLocateUpload({uploadPath, uploadid}) {
   return res.json();
 }
 
-async function baiduUploadPart({host, uploadPath, uploadid, partseq, chunk}) {
+async function baiduUploadPart({host, uploadPath, uploadid, partseq, chunk, accessToken}) {
+  const token = normalizeAccessToken(accessToken);
   const url = new URL(`${host}/rest/2.0/pcs/superfile2`);
   url.searchParams.set('method', 'upload');
-  url.searchParams.set('access_token', BAIDU_ACCESS_TOKEN);
+  url.searchParams.set('access_token', token);
   url.searchParams.set('type', 'tmpfile');
   url.searchParams.set('path', uploadPath);
   url.searchParams.set('uploadid', uploadid);
@@ -136,10 +143,11 @@ async function baiduUploadPart({host, uploadPath, uploadid, partseq, chunk}) {
   return res.json();
 }
 
-async function baiduCreateFile({uploadPath, size, uploadid, blockList}) {
+async function baiduCreateFile({uploadPath, size, uploadid, blockList, accessToken}) {
+  const token = normalizeAccessToken(accessToken);
   const url = new URL('https://pan.baidu.com/rest/2.0/xpan/file');
   url.searchParams.set('method', 'create');
-  url.searchParams.set('access_token', BAIDU_ACCESS_TOKEN);
+  url.searchParams.set('access_token', token);
 
   const body = new URLSearchParams();
   body.set('path', uploadPath);
@@ -161,12 +169,13 @@ async function baiduCreateFile({uploadPath, size, uploadid, blockList}) {
   return res.json();
 }
 
-async function createBaiduShareLink(fsid) {
+async function createBaiduShareLink(fsid, accessToken) {
+  const token = normalizeAccessToken(accessToken);
   const pwd = randomSharePwd();
   const url = new URL('https://pan.baidu.com/apaas/1.0/share/set');
   url.searchParams.set('product', 'netdisk');
   url.searchParams.set('appid', BAIDU_APP_ID);
-  url.searchParams.set('access_token', BAIDU_ACCESS_TOKEN);
+  url.searchParams.set('access_token', token);
 
   const form = new FormData();
   form.append('fsid_list', JSON.stringify([String(fsid)]));
@@ -206,7 +215,7 @@ async function createBaiduShareLink(fsid) {
   return link;
 }
 
-async function uploadFileToBaidu(localFile, uploadPath) {
+async function uploadFileToBaidu(localFile, uploadPath, accessToken) {
   const buffer = await fsp.readFile(localFile);
   const size = buffer.length;
   const chunks = splitToChunks(buffer);
@@ -214,7 +223,7 @@ async function uploadFileToBaidu(localFile, uploadPath) {
   const contentMd5 = md5(buffer);
   const sliceMd5 = md5(buffer.subarray(0, Math.min(SLICE, buffer.length)));
 
-  const precreateData = await baiduPrecreate({uploadPath, size, blockList, contentMd5, sliceMd5});
+  const precreateData = await baiduPrecreate({uploadPath, size, blockList, contentMd5, sliceMd5, accessToken});
   const uploadid = precreateData?.uploadid;
   const needParts = Array.isArray(precreateData?.block_list) ? precreateData.block_list : null;
 
@@ -224,7 +233,7 @@ async function uploadFileToBaidu(localFile, uploadPath) {
 
   let host = BAIDU_UPLOAD_HOST;
   if (!host) {
-    const locateData = await baiduLocateUpload({uploadPath, uploadid});
+    const locateData = await baiduLocateUpload({uploadPath, uploadid, accessToken});
     if (Array.isArray(locateData?.servers) && locateData.servers.length > 0) {
       host = locateData.servers.find((s) => s?.server?.startsWith('https://'))?.server || locateData.servers[0].server;
     } else if (Array.isArray(locateData?.quic_servers) && locateData.quic_servers.length > 0) {
@@ -242,13 +251,13 @@ async function uploadFileToBaidu(localFile, uploadPath) {
   for (const partseq of parts) {
     const chunk = chunks[partseq];
     if (!chunk) throw new Error(`分片不存在: ${partseq}`);
-    const uploadResp = await baiduUploadPart({host, uploadPath, uploadid, partseq, chunk});
+    const uploadResp = await baiduUploadPart({host, uploadPath, uploadid, partseq, chunk, accessToken});
     if (uploadResp?.errno && uploadResp.errno !== 0) {
       throw new Error(`分片上传失败: part=${partseq}, data=${JSON.stringify(uploadResp)}`);
     }
   }
 
-  const createResp = await baiduCreateFile({uploadPath, size, uploadid, blockList});
+  const createResp = await baiduCreateFile({uploadPath, size, uploadid, blockList, accessToken});
   if (createResp?.errno && createResp.errno !== 0) {
     throw new Error(`创建文件失败: ${JSON.stringify(createResp)}`);
   }
@@ -310,7 +319,12 @@ ipcMain.on('message', (event, message) => {
   console.log(message);
 })
 
-ipcMain.handle('upload-videos-to-baidu', async (_event, rows) => {
+ipcMain.handle('upload-videos-to-baidu', async (_event, payload) => {
+  const rows = Array.isArray(payload) ? payload : payload?.rows;
+  const accessToken = normalizeAccessToken(Array.isArray(payload) ? '' : payload?.accessToken);
+  if (!accessToken) {
+    throw new Error('参数错误: 缺少 accessToken');
+  }
   if (!Array.isArray(rows)) {
     throw new Error('参数错误: rows 必须是数组');
   }
@@ -356,8 +370,8 @@ ipcMain.handle('upload-videos-to-baidu', async (_event, rows) => {
 
     try {
       await downloadVideoToFile(row.videoUrl, localFile);
-      const {fsid} = await uploadFileToBaidu(localFile, uploadPath);
-      const shareUrl = await createBaiduShareLink(fsid);
+      const {fsid} = await uploadFileToBaidu(localFile, uploadPath, accessToken);
+      const shareUrl = await createBaiduShareLink(fsid, accessToken);
       resultRows[i] = {...row, shareUrl};
       successCount++;
       emitProgress(i);
