@@ -98,6 +98,15 @@ watch(
   {immediate: false}
 );
 
+const sanitizeTitle = (input: unknown) => {
+  const text = (input ?? '').toString();
+  const cleaned = text
+    .replace(/[@#][^\s，,。\.！!？?；;：:、]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned ? cleaned : '无标题';
+};
+
 let baiduAccessTokenSaveTimer: number | null = null;
 watch(
   baiduAccessToken,
@@ -359,7 +368,15 @@ const handleButtonClick = async () => {
         prevFirstTitle = (baseRowsOnPage[0]?.title ?? '').toString();
       }
 
-      collectedRows.value.push(...baseRowsOnPage.map((r) => ({...r, videoUrl: '', shareUrl: '', sharePwd: ''})));
+      collectedRows.value.push(
+        ...baseRowsOnPage.map((r) => ({
+          ...r,
+          title: sanitizeTitle((r as any)?.title),
+          videoUrl: '',
+          shareUrl: '',
+          sharePwd: ''
+        }))
+      );
       window.electronAPI.sendMessage(`第 ${page + 1} 页采集到 ${baseRowsOnPage.length} 条数据，开始采集视频链接...`);
 
       for (let i = 0; i < baseRowsOnPage.length; i++) {
