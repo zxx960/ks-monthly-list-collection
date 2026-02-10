@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {ref, watch} from 'vue';
+import {ref, watch, onMounted, onBeforeUnmount} from 'vue';
 import * as XLSX from 'xlsx';
 
 type RowItem = {
@@ -22,6 +22,41 @@ const cleaningProgress = ref<{ total: number; done: number }>({total: 0, done: 0
 const modalVisible = ref(false);
 const modalMessage = ref('');
 const collectedRows = ref<RowItem[]>([]);
+
+let teardownWebviewDomReady: null | (() => void) = null;
+
+onMounted(() => {
+  const webview = webviewRef.value;
+  if (!webview) return;
+
+  const css = `
+    * { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+    ::-webkit-scrollbar { width: 0px !important; height: 0px !important; }
+    ::-webkit-scrollbar-thumb { background: transparent !important; }
+  `;
+
+  const inject = () => {
+    try {
+      webview.insertCSS(css);
+    } catch {
+      // ignore
+    }
+  };
+
+  webview.addEventListener('dom-ready', inject);
+  teardownWebviewDomReady = () => webview.removeEventListener('dom-ready', inject);
+});
+
+onBeforeUnmount(() => {
+  if (teardownWebviewDomReady) {
+    try {
+      teardownWebviewDomReady();
+    } catch {
+      // ignore
+    }
+  }
+  teardownWebviewDomReady = null;
+});
 
 type UploadProgressPayload = {
   index: number;
@@ -564,16 +599,24 @@ const handleExportExcelClick = () => {
   height: 100vh;
   width: 100vw;
   margin: 0;
-  padding: 0;
+  padding: 8px;
+  gap: 8px;
+  box-sizing: border-box;
+  background: #f3f4f6;
 }
 
 .webview-container {
-  width: 60%;
-  height: 100%;
-  border-right: 1px solid #ccc;
+  flex: 0 0 60%;
+  min-width: 0;
+  display: flex;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
 }
 
 .webview {
+  flex: 1;
   width: 100%;
   height: 100%;
   border: none;
@@ -632,16 +675,18 @@ const handleExportExcelClick = () => {
 }
 
 .control-panel {
-  width: 40%;
-  height: 100%;
+  flex: 0 0 40%;
+  min-width: 0;
   padding: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  background-color: #f5f5f5;
+  background-color: #fff;
   padding-top: 20px;
   box-sizing: border-box;
+  border-radius: 12px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
 }
 
 .result-panel {
