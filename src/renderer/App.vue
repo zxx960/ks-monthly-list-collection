@@ -397,7 +397,7 @@ const handleUploadToBaiduClick = async () => {
 
   const accessToken = (baiduAccessToken.value || '').trim();
   if (!accessToken) {
-    window.electronAPI.sendMessage('请先填写 百度 ACCESS_TOKEN');
+    showModal('请先填写百度 ACCESS_TOKEN');
     return;
   }
 
