@@ -507,6 +507,7 @@ const handleExportExcelClick = () => {
           <input
             id="ark-api-key-input"
             v-model="arkApiKey"
+            type="password"
             class="ark-key-input"
             placeholder="Ark API Key（必填，用于大模型清洗）"
             :disabled="isCollecting || isCleaning || isUploadingToBaidu"
@@ -517,6 +518,7 @@ const handleExportExcelClick = () => {
           <input
             id="baidu-access-token-input"
             v-model="baiduAccessToken"
+            type="password"
             class="ark-key-input"
             placeholder="百度 ACCESS_TOKEN（必填，用于百度网盘上传）"
             :disabled="isCollecting || isCleaning || isUploadingToBaidu"
