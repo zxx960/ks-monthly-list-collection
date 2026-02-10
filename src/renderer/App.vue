@@ -330,27 +330,13 @@ const handleButtonClick = async () => {
       return videoUrl;
     };
 
-    const clickNextPageAndWait = async (prevFirstTitle: string) => {
+    const clickNextPage = async () => {
       const ok = await webview.executeJavaScript(
-        `(async () => {
-          const prev = ${JSON.stringify(prevFirstTitle || '')};
-          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
+        `(() => {
           const btn = document.querySelector('button.btn-next');
           if (!btn) return false;
           btn.click();
-
-          const timeoutMs = 15000;
-          const intervalMs = 300;
-          const start = Date.now();
-
-          while (Date.now() - start < timeoutMs) {
-            const first = document.querySelector('tbody tr.ks-table__row .info__title__text');
-            const title = (first && first.textContent) ? first.textContent.replace(/\\s+/g, ' ').trim() : '';
-            if (title && title !== prev) return true;
-            await sleep(intervalMs);
-          }
-          return false;
+          return true;
         })()`,
         true
       );
@@ -359,14 +345,9 @@ const handleButtonClick = async () => {
 
     collectedRows.value = [];
 
-    let prevFirstTitle = '';
     for (let page = 0; page < targetPages; page++) {
       const baseRowsOnPage = await collectBaseRowsOnCurrentPage();
       const startIndex = collectedRows.value.length;
-
-      if (!prevFirstTitle) {
-        prevFirstTitle = (baseRowsOnPage[0]?.title ?? '').toString();
-      }
 
       collectedRows.value.push(
         ...baseRowsOnPage.map((r) => ({
@@ -392,15 +373,13 @@ const handleButtonClick = async () => {
         }
       }
 
-      prevFirstTitle = (baseRowsOnPage[0]?.title ?? '').toString();
-
       if (page < targetPages - 1) {
-        const nextOk = await clickNextPageAndWait(prevFirstTitle);
+        const nextOk = await clickNextPage();
         if (!nextOk) {
-          window.electronAPI.sendMessage('翻页失败或超时，停止后续采集');
+          window.electronAPI.sendMessage('翻页失败，停止后续采集');
           break;
         }
-        await sleep(500);
+        await sleep(2000);
       }
     }
   } catch (e) {
