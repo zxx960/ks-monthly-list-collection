@@ -11,7 +11,7 @@ const BAIDU_ACCESS_TOKEN = '123.640e5b8e3e25f87b21832024eba42787.YHUs-QpgoFt2Qv5
 const BAIDU_APP_ID = '122053376';
 const BAIDU_UPLOAD_DIR = '/apps/zxx960';
 const BAIDU_UPLOAD_HOST = '';
-const BAIDU_SHARE_PERIOD = '7';
+const BAIDU_SHARE_PERIOD = '0';
 const FOUR_MB = 4 * 1024 * 1024;
 const SLICE = 256 * 1024;
 
@@ -231,15 +231,12 @@ async function createBaiduShareLink(fsid, accessToken) {
     const normalized = link.replace(/^\/?s\//, '');
     link = `https://pan.baidu.com/s/${normalized}`;
   }
-  if (link && !link.includes('pwd=')) {
-    link += `${link.includes('?') ? '&' : '?'}pwd=${pwd}`;
-  }
 
   if (!link) {
     throw new Error(`创建分享链接返回空链接: ${JSON.stringify(data)}`);
   }
 
-  return link;
+  return {link, pwd};
 }
 
 async function uploadFileToBaidu(localFile, uploadPath, accessToken) {
@@ -353,7 +350,7 @@ ipcMain.handle('upload-videos-to-baidu', async (_event, payload) => {
   const tempDir = path.join(app.getPath('temp'), 'ks-monthly-list-collection');
   await fsp.mkdir(tempDir, {recursive: true});
 
-  const resultRows = rows.map((row) => ({...row, shareUrl: row?.shareUrl || ''}));
+  const resultRows = rows.map((row) => ({...row, shareUrl: row?.shareUrl || '', sharePwd: row?.sharePwd || ''}));
   let successCount = 0;
   let failCount = 0;
   let skipCount = 0;
@@ -381,7 +378,7 @@ ipcMain.handle('upload-videos-to-baidu', async (_event, payload) => {
   for (let i = 0; i < resultRows.length; i++) {
     const row = resultRows[i];
     if (!isVideoUrlRow(row)) {
-      resultRows[i] = {...row, shareUrl: row.videoUrl === '已删除' ? '已删除' : '无链接'};
+      resultRows[i] = {...row, shareUrl: row.videoUrl === '已删除' ? '已删除' : '无链接', sharePwd: ''};
       skipCount++;
       emitProgress(i);
       continue;
@@ -396,13 +393,13 @@ ipcMain.handle('upload-videos-to-baidu', async (_event, payload) => {
     try {
       await downloadVideoToFile(row.videoUrl, localFile);
       const {fsid} = await uploadFileToBaidu(localFile, uploadPath, accessToken);
-      const shareUrl = await createBaiduShareLink(fsid, accessToken);
-      resultRows[i] = {...row, shareUrl};
+      const {link: shareUrl, pwd: sharePwd} = await createBaiduShareLink(fsid, accessToken);
+      resultRows[i] = {...row, shareUrl, sharePwd};
       successCount++;
       emitProgress(i);
     } catch (err) {
       console.error(`上传百度网盘失败 index=${i}`, err);
-      resultRows[i] = {...row, shareUrl: '上传失败'};
+      resultRows[i] = {...row, shareUrl: '上传失败', sharePwd: ''};
       failCount++;
       const errno = err?.baiduErrno;
       if (!globalTipSent && (errno === -6 || errno === 31045)) {

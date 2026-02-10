@@ -9,6 +9,7 @@ type RowItem = {
   likeCount: string;
   videoUrl: string;
   shareUrl: string;
+  sharePwd: string;
 };
 
 window.electronAPI.sendMessage('App loaded with webview layout!');
@@ -358,7 +359,7 @@ const handleButtonClick = async () => {
         prevFirstTitle = (baseRowsOnPage[0]?.title ?? '').toString();
       }
 
-      collectedRows.value.push(...baseRowsOnPage.map((r) => ({...r, videoUrl: '', shareUrl: ''})));
+      collectedRows.value.push(...baseRowsOnPage.map((r) => ({...r, videoUrl: '', shareUrl: '', sharePwd: ''})));
       window.electronAPI.sendMessage(`第 ${page + 1} 页采集到 ${baseRowsOnPage.length} 条数据，开始采集视频链接...`);
 
       for (let i = 0; i < baseRowsOnPage.length; i++) {
@@ -426,7 +427,8 @@ const handleUploadToBaiduClick = async () => {
       playCount: row.playCount,
       likeCount: row.likeCount,
       videoUrl: row.videoUrl,
-      shareUrl: row.shareUrl
+      shareUrl: row.shareUrl,
+      sharePwd: row.sharePwd
     }));
     const result = await window.electronAPI.uploadVideosToBaidu({rows, accessToken});
     if (result?.rows && Array.isArray(result.rows)) {
@@ -459,7 +461,8 @@ const handleExportExcelClick = () => {
     播放量: (r?.playCount ?? '').toString(),
     点赞量: (r?.likeCount ?? '').toString(),
     视频链接: (r?.videoUrl ?? '').toString(),
-    分享链接: (r?.shareUrl ?? '').toString()
+    分享链接: (r?.shareUrl ?? '').toString(),
+    提取码: (r?.sharePwd ?? '').toString()
   }));
 
   const ws = XLSX.utils.json_to_sheet(rows, {skipHeader: false});
@@ -574,6 +577,7 @@ const handleExportExcelClick = () => {
               <th class="col-num">点赞量</th>
               <th class="col-video">视频链接</th>
               <th class="col-share">分享链接</th>
+              <th class="col-pwd">提取码</th>
             </tr>
           </thead>
           <tbody>
@@ -589,11 +593,20 @@ const handleExportExcelClick = () => {
                 <span v-else class="no-video"></span>
               </td>
               <td class="cell-share">
-                <a v-if="row.shareUrl && row.shareUrl !== '上传失败' && row.shareUrl !== '已删除' && row.shareUrl !== '无链接'" :href="row.shareUrl" target="_blank" class="share-link" :title="row.shareUrl">{{ row.shareUrl }}</a>
+                <a
+                  v-if="row.shareUrl && row.shareUrl !== '上传失败' && row.shareUrl !== '已删除' && row.shareUrl !== '无链接'"
+                  :href="row.shareUrl"
+                  target="_blank"
+                  class="share-link"
+                  :title="row.shareUrl"
+                >
+                  {{ row.shareUrl }}
+                </a>
                 <span v-else-if="row.shareUrl === '上传失败'" class="deleted-video">上传失败</span>
                 <span v-else-if="row.shareUrl === '已删除' || row.shareUrl === '无链接'" class="no-video">{{ row.shareUrl }}</span>
                 <span v-else class="no-video"></span>
               </td>
+              <td class="cell-pwd">{{ row.sharePwd }}</td>
             </tr>
           </tbody>
         </table>
@@ -737,15 +750,15 @@ const handleExportExcelClick = () => {
 }
 
 .col-title {
-  width: 34%;
+  width: 30%;
 }
 
 .col-time {
-  width: 12%;
+  width: 10%;
 }
 
 .col-num {
-  width: 12%;
+  width: 10%;
 }
 
 .col-video {
@@ -754,6 +767,10 @@ const handleExportExcelClick = () => {
 
 .col-share {
   width: 15%;
+}
+
+.col-pwd {
+  width: 10%;
 }
 
 .result-table td.cell-title {
@@ -772,6 +789,10 @@ const handleExportExcelClick = () => {
 
 .result-table td.cell-share {
   word-break: break-all;
+}
+
+.cell-pwd {
+  white-space: nowrap;
 }
 
 .cell-video {
