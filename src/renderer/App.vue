@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {ref} from 'vue';
+import * as XLSX from 'xlsx';
 
 type RowItem = {
   title: string;
@@ -375,6 +376,40 @@ const handleUploadToBaiduClick = async () => {
     isUploadingToBaidu.value = false;
   }
 };
+
+const handleExportExcelClick = () => {
+  if (!collectedRows.value || collectedRows.value.length === 0) return;
+
+  const rows = collectedRows.value.map((r) => ({
+    视频名称: (r?.title ?? '').toString(),
+    发布时间: (r?.publishTime ?? '').toString(),
+    播放量: (r?.playCount ?? '').toString(),
+    点赞量: (r?.likeCount ?? '').toString(),
+    视频链接: (r?.videoUrl ?? '').toString(),
+    分享链接: (r?.shareUrl ?? '').toString()
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows, {skipHeader: false});
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '数据');
+
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const filename = `月榜单_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.xlsx`;
+
+  const data = XLSX.write(wb, {bookType: 'xlsx', type: 'array'});
+  const blob = new Blob([data], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
 </script>
 
 <template>
@@ -420,6 +455,9 @@ const handleUploadToBaiduClick = async () => {
         </button>
         <button @click="handleUploadToBaiduClick" class="control-button baidu-button action-button" :disabled="isCollecting || isCleaning || isUploadingToBaidu || collectedRows.length === 0">
           {{ isUploadingToBaidu ? '上传中...' : '上传百度网盘' }}
+        </button>
+        <button @click="handleExportExcelClick" class="control-button export-button action-button" :disabled="isCollecting || isCleaning || isUploadingToBaidu || collectedRows.length === 0">
+          导出Excel
         </button>
       </div>
 
