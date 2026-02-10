@@ -1,14 +1,17 @@
 {
     "appId": "com.electron.app",
+    "productName": "鱼粉快手月榜单采集",
     "directories": {
         "output": "dist"
     },
+
+    "artifactName": "${productName} Setup ${version}.${ext}",
 
     "nsis": {
         "oneClick": false,
         "perMachine": false,
         "allowToChangeInstallationDirectory": true,
-        "shortcutName": "Electron App"
+        "shortcutName": "鱼粉快手月榜单采集"
     },
     "win": {
         "target": "nsis"
