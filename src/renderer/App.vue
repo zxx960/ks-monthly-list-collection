@@ -62,6 +62,8 @@ type UploadProgressPayload = {
   index: number;
   row: RowItem;
   summary?: {total: number; success: number; failed: number; skipped: number};
+  globalErrno?: number;
+  globalMessage?: string;
 };
 
 const showModal = (message: string) => {
@@ -402,10 +404,15 @@ const handleUploadToBaiduClick = async () => {
   }
 
   let unsubscribeProgress: null | (() => void) = null;
+  let globalTipShown = false;
   try {
     isUploadingToBaidu.value = true;
 
     unsubscribeProgress = window.electronAPI.onUploadVideosToBaiduProgress((payload: UploadProgressPayload) => {
+      if (!globalTipShown && payload?.globalMessage) {
+        globalTipShown = true;
+        showModal(payload.globalMessage);
+      }
       const index = Number(payload?.index);
       if (!Number.isFinite(index) || index < 0) return;
       if (!payload?.row) return;

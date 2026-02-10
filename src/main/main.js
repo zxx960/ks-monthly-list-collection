@@ -19,6 +19,27 @@ function normalizeAccessToken(accessToken) {
   return (accessToken || BAIDU_ACCESS_TOKEN || '').toString().trim();
 }
 
+function baiduErrnoMessage(errno) {
+  if (errno === -6) return '身份验证失败：access_token 可能已失效，请重新获取 token 后再上传';
+  if (errno === 31045) return 'access_token 验证未通过：请检查 access_token 是否过期、授权时是否勾选网盘权限等，重新获取 token 后再上传';
+  return `百度接口错误 errno=${errno}`;
+}
+
+function makeBaiduError(errno, api, data) {
+  const err = new Error(`${baiduErrnoMessage(errno)} (${api})`);
+  err.baiduErrno = errno;
+  err.baiduApi = api;
+  err.baiduData = data;
+  return err;
+}
+
+function assertBaiduOk(data, api) {
+  const errno = Number.isFinite(data?.errno) ? data.errno : (Number.isFinite(data?.error_code) ? data.error_code : 0);
+  if (errno && errno !== 0) {
+    throw makeBaiduError(errno, api, data);
+  }
+}
+
 function md5(buf) {
   return crypto.createHash('md5').update(buf).digest('hex');
 }
@@ -105,7 +126,9 @@ async function baiduPrecreate({uploadPath, size, blockList, contentMd5, sliceMd5
     body
   });
 
-  return res.json();
+  const data = await res.json();
+  assertBaiduOk(data, 'precreate');
+  return data;
 }
 
 async function baiduLocateUpload({uploadPath, uploadid, accessToken}) {
@@ -119,7 +142,9 @@ async function baiduLocateUpload({uploadPath, uploadid, accessToken}) {
   url.searchParams.set('upload_version', '2.0');
 
   const res = await fetch(url.toString(), {method: 'GET'});
-  return res.json();
+  const data = await res.json();
+  assertBaiduOk(data, 'locateupload');
+  return data;
 }
 
 async function baiduUploadPart({host, uploadPath, uploadid, partseq, chunk, accessToken}) {
@@ -140,7 +165,9 @@ async function baiduUploadPart({host, uploadPath, uploadid, partseq, chunk, acce
     body: form
   });
 
-  return res.json();
+  const data = await res.json();
+  assertBaiduOk(data, `uploadpart:${partseq}`);
+  return data;
 }
 
 async function baiduCreateFile({uploadPath, size, uploadid, blockList, accessToken}) {
@@ -166,7 +193,9 @@ async function baiduCreateFile({uploadPath, size, uploadid, blockList, accessTok
     body
   });
 
-  return res.json();
+  const data = await res.json();
+  assertBaiduOk(data, 'create');
+  return data;
 }
 
 async function createBaiduShareLink(fsid, accessToken) {
@@ -188,9 +217,7 @@ async function createBaiduShareLink(fsid, accessToken) {
   });
   const data = await res.json();
 
-  if (data?.errno && data.errno !== 0) {
-    throw new Error(`创建分享链接失败: ${JSON.stringify(data)}`);
-  }
+  assertBaiduOk(data, 'share/set');
 
   const payload = data?.data || data;
   const shortCode = payload?.short_url || payload?.shorturl || payload?.surl || '';
@@ -251,16 +278,10 @@ async function uploadFileToBaidu(localFile, uploadPath, accessToken) {
   for (const partseq of parts) {
     const chunk = chunks[partseq];
     if (!chunk) throw new Error(`分片不存在: ${partseq}`);
-    const uploadResp = await baiduUploadPart({host, uploadPath, uploadid, partseq, chunk, accessToken});
-    if (uploadResp?.errno && uploadResp.errno !== 0) {
-      throw new Error(`分片上传失败: part=${partseq}, data=${JSON.stringify(uploadResp)}`);
-    }
+    await baiduUploadPart({host, uploadPath, uploadid, partseq, chunk, accessToken});
   }
 
   const createResp = await baiduCreateFile({uploadPath, size, uploadid, blockList, accessToken});
-  if (createResp?.errno && createResp.errno !== 0) {
-    throw new Error(`创建文件失败: ${JSON.stringify(createResp)}`);
-  }
 
   const fsid = createResp?.fs_id || createResp?.info?.fs_id || createResp?.info?.[0]?.fs_id;
   if (!fsid) {
@@ -337,7 +358,7 @@ ipcMain.handle('upload-videos-to-baidu', async (_event, payload) => {
   let failCount = 0;
   let skipCount = 0;
 
-  const emitProgress = (index) => {
+  const emitProgress = (index, extra) => {
     try {
       _event?.sender?.send('upload-videos-to-baidu-progress', {
         index,
@@ -347,12 +368,15 @@ ipcMain.handle('upload-videos-to-baidu', async (_event, payload) => {
           success: successCount,
           failed: failCount,
           skipped: skipCount
-        }
+        },
+        ...(extra || {})
       });
     } catch {
       // ignore
     }
   };
+
+  let globalTipSent = false;
 
   for (let i = 0; i < resultRows.length; i++) {
     const row = resultRows[i];
@@ -368,6 +392,7 @@ ipcMain.handle('upload-videos-to-baidu', async (_event, payload) => {
     const localFile = path.join(tempDir, `${Date.now()}-${i + 1}-${baseName}${ext}`);
     const uploadPath = `${BAIDU_UPLOAD_DIR}/${path.basename(localFile)}`;
 
+    let shouldStop = false;
     try {
       await downloadVideoToFile(row.videoUrl, localFile);
       const {fsid} = await uploadFileToBaidu(localFile, uploadPath, accessToken);
@@ -379,9 +404,20 @@ ipcMain.handle('upload-videos-to-baidu', async (_event, payload) => {
       console.error(`上传百度网盘失败 index=${i}`, err);
       resultRows[i] = {...row, shareUrl: '上传失败'};
       failCount++;
-      emitProgress(i);
+      const errno = err?.baiduErrno;
+      if (!globalTipSent && (errno === -6 || errno === 31045)) {
+        globalTipSent = true;
+        shouldStop = true;
+        emitProgress(i, {globalErrno: errno, globalMessage: baiduErrnoMessage(errno)});
+      } else {
+        emitProgress(i);
+      }
     } finally {
       await fsp.unlink(localFile).catch(() => {});
+    }
+
+    if (shouldStop) {
+      break;
     }
   }
 
