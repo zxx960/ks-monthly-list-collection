@@ -434,22 +434,24 @@ const handleExportExcelClick = () => {
     </div>
     <div class="control-panel">
       <h2>鱼粉快手月榜单采集</h2>
-      <div class="page-input-row">
-        <label class="page-input-label" for="page-count-input">采集页数</label>
-        <input
-          id="page-count-input"
-          v-model.number="pageCount"
-          type="number"
-          min="1"
-          step="1"
-          class="page-input"
-          :disabled="isCollecting || isCleaning || isUploadingToBaidu"
-        />
-      </div>
-      <div class="action-row">
-        <button @click="handleButtonClick" class="control-button action-button" :disabled="isCollecting || isCleaning || isUploadingToBaidu">
+      <div class="collect-row">
+        <div class="page-input-row">
+          <label class="page-input-label" for="page-count-input">采集页数</label>
+          <input
+            id="page-count-input"
+            v-model.number="pageCount"
+            type="number"
+            min="1"
+            step="1"
+            class="page-input"
+            :disabled="isCollecting || isCleaning || isUploadingToBaidu"
+          />
+        </div>
+        <button @click="handleButtonClick" class="control-button collect-button" :disabled="isCollecting || isCleaning || isUploadingToBaidu">
           采集数据
         </button>
+      </div>
+      <div class="action-row">
         <button @click="handleCleanButtonClick" class="control-button clean-button action-button" :disabled="isCollecting || isCleaning || isUploadingToBaidu || collectedRows.length === 0 || !arkApiKey.trim()">
           {{ isCleaning ? '清洗中...' : '数据清洗' }}
         </button>
@@ -734,12 +736,24 @@ const handleExportExcelClick = () => {
   gap: 10px;
 }
 
+.collect-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
 .page-input-row {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+}
+
+.collect-row .page-input-row {
+  flex: 1;
+  margin-bottom: 0;
 }
 
 .page-input-label {
@@ -766,6 +780,10 @@ const handleExportExcelClick = () => {
 .action-button {
   flex: 1;
   padding: 12px 0;
+}
+
+.collect-button {
+  flex: 0 0 auto;
 }
 
 .ark-key-panel {
