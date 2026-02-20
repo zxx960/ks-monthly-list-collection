@@ -1,77 +1,98 @@
-<div align="center"> 
+# 鱼粉快手月榜单采集
 
-# Electron Vue Template
-  
-<img width="794" alt="image" src="https://user-images.githubusercontent.com/32544586/222748627-ee10c9a6-70d2-4e21-b23f-001dd8ec7238.png">
+一个基于 **Electron + Vue 3** 的桌面工具，用于在快手机构后台采集月榜单数据，并支持：
 
-A simple starter template for a **Vue3** + **Electron** TypeScript based application, including **ViteJS** and **Electron Builder**.
-</div>
+- 数据清洗（调用火山大模型）
+- 上传视频到百度网盘并生成分享链接
+- 导出 Excel
 
-## About
+## 功能概览
 
-This template utilizes [ViteJS](https://vitejs.dev) for building and serving your (Vue powered) front-end process, it provides Hot Reloads (HMR) to make development fast and easy ⚡ 
+1. **榜单采集**
+   - 按页采集（可配置页数）
+   - 翻页逻辑：点击“下一页”后固定等待 2 秒继续采集
+2. **标题处理**
+   - 自动去除 `@` / `#` 话题及其后缀内容
+   - 清理后为空时自动填充“无标题”
+3. **数据清洗**
+   - 使用火山 API Key 调用模型判断并清洗带货数据
+4. **百度网盘上传**
+   - 支持填写并自动保存 `ACCESS_TOKEN`
+   - 上传后回填分享链接与提取码
+   - 针对 token 失效场景（如 `errno=-6`、`errno=31045`）提供提示并中止
+5. **Excel 导出**
+   - 导出字段包含：视频名称、发布时间、播放量、点赞量、视频链接、分享链接、提取码
 
-Building the Electron (main) process is done with [Electron Builder](https://www.electron.build/), which makes your application easily distributable and supports cross-platform compilation 😎
+## 技术栈
 
-## Getting started
+- Electron
+- Vue 3
+- Vite
+- Electron Builder
+- xlsx
 
-Click the green **Use this template** button on top of the repository, and clone your own newly created repository.
+## 安装与启动
 
-**Or..**
-
-Clone this repository: `git clone git@github.com:Deluze/electron-vue-template.git`
-
-
-### Install dependencies ⏬
+### 1）安装依赖
 
 ```bash
 npm install
 ```
 
-### Start developing ⚒️
+### 2）开发模式运行
 
 ```bash
 npm run dev
 ```
 
-## Additional Commands
+## 打包命令
 
 ```bash
-npm run dev # starts application with hot reload
-npm run build # builds application, distributable files can be found in "dist" folder
-
-# OR
-
-npm run build:win # uses windows as build target
-npm run build:mac # uses mac as build target
-npm run build:linux # uses linux as build target
+npm run build       # 默认打包
+npm run build:win   # 打包 Windows
+npm run build:mac   # 打包 macOS
+npm run build:linux # 打包 Linux
 ```
 
-Optional configuration options can be found in the [Electron Builder CLI docs](https://www.electron.build/cli.html).
-## Project Structure
+打包产物可在 `dist/` 目录查看。
+
+## 使用流程
+
+1. 打开应用并登录快手机构后台页面。
+2. 填写：
+   - 火山 API Key（用于数据清洗）
+   - 百度 ACCESS_TOKEN（用于百度网盘上传）
+3. 设置采集页数，点击“采集数据”。
+4. 按需点击“数据清洗”。
+5. 点击“上传百度网盘”生成分享链接与提取码。
+6. 点击“导出Excel”下载结果表。
+
+## 项目结构
 
 ```bash
-- scripts/ # all the scripts used to build or serve your application, change as you like.
-- src/
-  - main/ # Main thread (Electron application source)
-  - renderer/ # Renderer thread (VueJS application source)
+scripts/             # 开发与构建脚本
+src/
+  main/              # Electron 主进程
+  renderer/          # Vue 渲染进程
 ```
 
-## Using static files
+## 注意事项
 
-If you have any files that you want to copy over to the app directory after installation, you will need to add those files in your `src/main/static` directory.
+1. `ACCESS_TOKEN` 需要具备百度网盘相关权限。
+2. 若出现 token 相关报错，请检查：
+   - token 是否过期
+   - 授权时是否勾选网盘权限
+3. 采集与上传过程中请保持网络稳定。
 
-Files in said directory are only accessible to the `main` process, similar to `src/renderer/assets` only being accessible to the `renderer` process. Besides that, the concept is the same as to what you're used to in your other front-end projects.
+## 百度 ACCESS_TOKEN 获取方式
 
-#### Referencing static files from your main process
+1. 打开以下授权地址（单行）：
 
-```ts
-/* Assumes src/main/static/myFile.txt exists */
-
-import {app} from 'electron';
-import {join} from 'path';
-import {readFileSync} from 'fs';
-
-const path = join(app.getAppPath(), 'static', 'myFile.txt');
-const buffer = readFileSync(path);
+```text
+https://openapi.baidu.com/oauth/2.0/authorize?response_type=token&client_id=NQ5eywTG2zzKSCiz22cpoBj7ZQupLBzr&redirect_uri=oob&scope=basic,netdisk
 ```
+
+2. 登录百度账号并确认授权。
+3. 页面会返回包含 `access_token` 的结果，复制后填入本工具的“百度 ACCESS_TOKEN”输入框。
+
+> 提示：`access_token` 有有效期，过期后需要重新授权获取。
