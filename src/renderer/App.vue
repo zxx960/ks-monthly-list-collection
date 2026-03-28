@@ -274,6 +274,29 @@ const handleButtonClick = async () => {
       return Array.isArray(baseRows) ? baseRows : [];
     };
 
+    const getCurrentPageSignature = async () => {
+      const signature = await webview.executeJavaScript(
+        `(() => {
+          const normalize = (s) => (s ?? '').toString().replace(/\\s+/g, ' ').trim();
+          const rows = Array.from(document.querySelectorAll('tbody tr.ks-table__row')).slice(0, 3);
+          const rowSignature = rows.map((tr) => {
+            const title = normalize(tr.querySelector('.info__title__text')?.textContent);
+            const time = normalize(tr.querySelector('.info__base__time__item')?.textContent);
+            return [title, time].filter(Boolean).join('@');
+          }).filter(Boolean).join('||');
+
+          const activePage =
+            normalize(document.querySelector('.ant-pagination-item-active')?.textContent) ||
+            normalize(document.querySelector('.pagination .active')?.textContent) ||
+            normalize(document.querySelector('[aria-current=\"page\"]')?.textContent);
+
+          return JSON.stringify({activePage, rowSignature});
+        })()`,
+        true
+      );
+      return typeof signature === 'string' ? signature : '';
+    };
+
     const collectVideoUrlOnCurrentPageByIndex = async (idx: number) => {
       const videoUrl = await webview.executeJavaScript(
         `(async () => {
@@ -330,22 +353,92 @@ const handleButtonClick = async () => {
       return videoUrl;
     };
 
-    const clickNextPage = async () => {
-      const ok = await webview.executeJavaScript(
-        `(() => {
-          const btn = document.querySelector('button.btn-next');
-          if (!btn) return false;
-          btn.click();
-          return true;
+    const clickNextPage = async (currentSignature: string) => {
+      const result = await webview.executeJavaScript(
+        `(async () => {
+          const currentSignature = ${JSON.stringify(currentSignature)};
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+          const normalize = (s) => (s ?? '').toString().replace(/\\s+/g, ' ').trim();
+
+          const getSignature = () => {
+            const rows = Array.from(document.querySelectorAll('tbody tr.ks-table__row')).slice(0, 3);
+            const rowSignature = rows.map((tr) => {
+              const title = normalize(tr.querySelector('.info__title__text')?.textContent);
+              const time = normalize(tr.querySelector('.info__base__time__item')?.textContent);
+              return [title, time].filter(Boolean).join('@');
+            }).filter(Boolean).join('||');
+
+            const activePage =
+              normalize(document.querySelector('.ant-pagination-item-active')?.textContent) ||
+              normalize(document.querySelector('.pagination .active')?.textContent) ||
+              normalize(document.querySelector('[aria-current="page"]')?.textContent);
+
+            return JSON.stringify({activePage, rowSignature});
+          };
+
+          const isDisabled = (btn) => {
+            if (!btn) return true;
+            if (btn.disabled) return true;
+            if (btn.getAttribute('aria-disabled') === 'true') return true;
+            const className = (btn.className || '').toString();
+            return /disabled|forbid|ban/i.test(className);
+          };
+
+          const findNextButton = () => {
+            const selectors = [
+              'button.btn-next',
+              '.btn-next',
+              '.ant-pagination-next button',
+              '.ant-pagination-next',
+              'button[aria-label*="next" i]',
+              'button[title*="下一页"]',
+              'button[title*="下页"]'
+            ];
+
+            for (const selector of selectors) {
+              const el = document.querySelector(selector);
+              if (el) return el;
+            }
+
+            const candidates = Array.from(document.querySelectorAll('button, a, div, span'));
+            return candidates.find((el) => /下一页|下页|next/i.test(normalize(el.textContent)));
+          };
+
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const btn = findNextButton();
+            if (!btn || isDisabled(btn)) {
+              return {ok: false, reason: 'next-disabled'};
+            }
+
+            btn.scrollIntoView({behavior: 'smooth', block: 'center', inline: 'center'});
+            await sleep(500);
+
+            btn.dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+            btn.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+            btn.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+            btn.click();
+
+            const waitStart = Date.now();
+            while (Date.now() - waitStart < 15000) {
+              await sleep(400);
+              const nextSignature = getSignature();
+              if (nextSignature && nextSignature !== currentSignature) {
+                return {ok: true, reason: 'changed'};
+              }
+            }
+          }
+
+          return {ok: false, reason: 'page-not-changed'};
         })()`,
         true
       );
-      return !!ok;
+      return result && result.ok ? true : false;
     };
 
     collectedRows.value = [];
 
     for (let page = 0; page < targetPages; page++) {
+      const currentPageSignature = await getCurrentPageSignature();
       const baseRowsOnPage = await collectBaseRowsOnCurrentPage();
       const startIndex = collectedRows.value.length;
 
@@ -374,12 +467,12 @@ const handleButtonClick = async () => {
       }
 
       if (page < targetPages - 1) {
-        const nextOk = await clickNextPage();
+        const nextOk = await clickNextPage(currentPageSignature);
         if (!nextOk) {
           window.electronAPI.sendMessage('翻页失败，停止后续采集');
           break;
         }
-        await sleep(2000);
+        await sleep(1500);
       }
     }
   } catch (e) {
