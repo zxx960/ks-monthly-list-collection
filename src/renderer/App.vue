@@ -735,6 +735,8 @@ const handleExportExcelClick = () => {
   font-size: 12px;
   vertical-align: middle;
   text-align: center;
+  color: #333;
+  background: #fff;
 }
 
 .result-table th {
@@ -868,6 +870,8 @@ const handleExportExcelClick = () => {
   border: 1px solid #d0d0d0;
   border-radius: 4px;
   outline: none;
+  color: #333;
+  background: #fff;
 }
 
 .page-input:disabled {
@@ -913,6 +917,8 @@ const handleExportExcelClick = () => {
   border: 1px solid #d0d0d0;
   border-radius: 4px;
   outline: none;
+  color: #333;
+  background: #fff;
 }
 
 .ark-key-input:disabled {
